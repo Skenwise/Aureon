@@ -29,8 +29,8 @@ backend/
  │    ├── exchange_rate.py
  │    └── fx_revaluation.py
  │
- ├── tenants/           # Company isolation
- │    ├── tenant.py
+ ├── tenants/           # Company isolation (Service layer for the existing 'Company' model)
+ │    ├── tenant.py    # TenantService operates on database/model/core/company.py
  │    └── context.py
  │
  ├── identity/          # Security ≠ users
