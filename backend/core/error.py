@@ -27,3 +27,13 @@ class ValidationError(AureonError):
 class LoanError(AureonError):
     """Exception raised for errors in loan operations."""
     pass
+
+class NotFoundError(Exception):
+    """
+    Raised when a requested entity is not found in the database.
+    """
+    def __init__(self, entity: str, identifier: str):
+        super().__init__(f"{entity} with identifier '{identifier}' not found")
+        self.entity = entity
+        self.identifier = identifier
+

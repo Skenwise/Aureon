@@ -1,15 +1,13 @@
 # Next Tasks
 
-## High Priority
-- [ ] Implement Identity Module (users, roles, permissions, auth) - Backend Layer
-- [x] Implement Tenant Context Management (context.py) - Backend Layer
-- [ ] Validate Tenant Service implementation with tests
-- [ ] Resolve any remaining company_id field issues if they exist
+## Higher Priority
 
-## Medium Priority
-- [ ] Begin Accounting Module (journals, postings, accounts) - Backend Layer
-- [ ] Implement App Layer (FastAPI routes and API endpoints)
-- [ ] Add proper error handling and logging throughout
+- [ ] build the  Identity module
+- [ ] build the accounting module
+- [ ] write high quality code 
+- [ ] understand the design pattern use on those two modules
 
-## Low Priority
-- [ ] Implement Frontend Layer (UI components)
+## Lower Priority
+
+- [ ] refine architecture technical documentation 
+- [ ] start writting documentation for eahc module
