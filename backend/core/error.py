@@ -1,3 +1,5 @@
+# backend/core/error.py
+
 """
 Custom exception classes for the Aureon banking system.
 These provide domain-specific error handling for different components.
@@ -36,4 +38,26 @@ class NotFoundError(Exception):
         super().__init__(f"{entity} with identifier '{identifier}' not found")
         self.entity = entity
         self.identifier = identifier
+
+class AuthenticationError(AureonError):
+    """
+    Exception raised for authentication failures.
+    
+    This includes:
+    - Invalid credentials (username/password mismatch)
+    - Expired tokens
+    - Invalid tokens
+    - Token signature verification failures
+    """
+    pass
+
+class AuthorizationError(AureonError):
+    """
+    Exception raised for authorization failures.
+
+    This is raised when an authenticated identity
+    attempts to perform an action without the
+    required permission or role authority.
+    """
+    pass
 

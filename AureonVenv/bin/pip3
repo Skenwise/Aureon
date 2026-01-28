@@ -1,4 +1,4 @@
-#!/home/skenwise/Desktop/Project/Aureon/AureonVenv/bin/python
+#!/home/skenwise/dbs/Desktop/Project/Aureon/AureonVenv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

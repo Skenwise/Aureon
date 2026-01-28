@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV "/home/skenwise/Desktop/Project/Aureon/AureonVenv"
+set -gx VIRTUAL_ENV "/home/skenwise/dbs/Desktop/Project/Aureon/AureonVenv"
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/bin" $PATH
