@@ -26,6 +26,7 @@ class Journal(BaseModel, table=True):
     status: Optional[str] = Field(default="pending")
     processed_at: Optional[datetime] = None
     metadata_: Optional[str] = Field(default=None)  # JSON stored as string
+    source: str = Field(..., max_length=50, description="Source system or module generating this journal (e.g., LOAN_MODULE).")
 
     # Relationships
     company: Optional["Company"] = Relationship(back_populates="journals")

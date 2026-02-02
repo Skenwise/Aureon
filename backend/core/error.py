@@ -72,3 +72,7 @@ class CalculationError(AureonError):
     """
     pass
 
+class DomainError(AureonError):
+    """Raised when a domain invariant is violated in core objects (e.g., Posting, Account)."""
+    pass
+
