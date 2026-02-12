@@ -5,6 +5,7 @@ from typing import Optional, List
 from ..base import BaseModel
 from ..core.customer import Customer
 from ..core.company import Company
+from database.model.treasury.cash_position import CashPosition
 
 # only import for type checking to avoid circular imports
 from typing import TYPE_CHECKING
@@ -29,3 +30,4 @@ class Account(BaseModel, table=True):
     owner_customer: Optional[Customer] = Relationship(back_populates="accounts")
     company: Optional["Company"] = Relationship(back_populates="accounts")
     postings: List["Posting"] = Relationship(back_populates="account")
+    cash_positions: list["CashPosition"] = Relationship(back_populates="linked_account")
