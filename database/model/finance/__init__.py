@@ -4,6 +4,8 @@ from .journal import Journal
 from .loan_schedule import LoanSchedule
 from .loan import Loan
 from .posting import Posting
+from .loan_disbursement import LoanDisbursement
+from .loan_repayment import LoanRepayment
 
-__all__ = ['Account', 'Fee', 'Journal', 'LoanSchedule', 'Loan', 'Posting']
+__all__ = ['Account', 'Fee', 'Journal', 'LoanSchedule', 'Loan', 'Posting', 'LoanDisbursement', 'LoanRepayment']
 

@@ -3,6 +3,8 @@ from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
 from datetime import date, datetime
 from typing import Optional, List
+
+from database.model.finance.loan_repayment import LoanRepayment
 from ..base import BaseModel
 from ..core.customer import Customer
 from ..core.company import Company
@@ -11,6 +13,7 @@ from ..core.company import Company
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .loan_schedule import LoanSchedule
+    from .loan_disbursement import LoanDisbursement
 
 class Loan(BaseModel, table=True):
     """
@@ -31,3 +34,5 @@ class Loan(BaseModel, table=True):
     customer: Optional["Customer"] = Relationship(back_populates="loans")
     company: Optional["Company"] = Relationship(back_populates="loans")
     schedules: List["LoanSchedule"] = Relationship(back_populates="loan")
+    disbursements: List["LoanDisbursement"] = Relationship(back_populates="loan")
+    repayments: List["LoanRepayment"] = Relationship(back_populates="loan")

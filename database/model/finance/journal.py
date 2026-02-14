@@ -3,6 +3,8 @@ from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
 from datetime import datetime
 from typing import Optional, List
+
+from database.model.finance.loan_repayment import LoanRepayment
 from ..base import BaseModel
 from ..core.company import Company
 from ..core.user import User
@@ -12,6 +14,8 @@ from ..misc.currency import Currency
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .posting import Posting
+    from .loan_disbursement import LoanDisbursement
+    from .loan_repayment import LoanRepayment
     
 class Journal(BaseModel, table=True):
     """
@@ -32,3 +36,5 @@ class Journal(BaseModel, table=True):
     company: Optional["Company"] = Relationship(back_populates="journals")
     creator: Optional["User"] = Relationship(back_populates="journals_created")
     postings: List["Posting"] = Relationship(back_populates="journal")
+    loan_disbursements: List["LoanDisbursement"] = Relationship(back_populates="journal_entry")
+    loan_repayments: List["LoanRepayment"] = Relationship(back_populates="journal_entry")

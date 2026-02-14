@@ -1,4 +1,4 @@
-# ADR-2026-02-02-accounting-module
+# ADR-2026-02-03-accounting-module
 
 ## Status
 

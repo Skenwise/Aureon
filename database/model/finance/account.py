@@ -11,6 +11,7 @@ from database.model.treasury.cash_position import CashPosition
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .posting import Posting
+    from .loan_disbursement import LoanDisbursement
 
 class Account(BaseModel, table=True):
     """
@@ -31,3 +32,4 @@ class Account(BaseModel, table=True):
     company: Optional["Company"] = Relationship(back_populates="accounts")
     postings: List["Posting"] = Relationship(back_populates="account")
     cash_positions: list["CashPosition"] = Relationship(back_populates="linked_account")
+    loan_disbursements: List["LoanDisbursement"] = Relationship(back_populates="disbursement_account")
