@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from database.model.finance.loan_repayment import LoanRepayment
+from database.model.payments.payment import Payment
 from ..base import BaseModel
 from ..core.company import Company
 from ..core.user import User
@@ -31,6 +32,7 @@ class Journal(BaseModel, table=True):
     processed_at: Optional[datetime] = None
     metadata_: Optional[str] = Field(default=None)  # JSON stored as string
     source: str = Field(..., max_length=50, description="Source system or module generating this journal (e.g., LOAN_MODULE).")
+    payments: list["Payment"] = Relationship(back_populates="journal_entry")
 
     # Relationships
     company: Optional["Company"] = Relationship(back_populates="journals")

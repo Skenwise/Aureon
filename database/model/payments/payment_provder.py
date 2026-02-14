@@ -1,7 +1,9 @@
 # models/payments/payment_provider.py
-from sqlmodel import SQLModel, Field
+from sqlmodel import Relationship, SQLModel, Field
 from uuid import UUID
 from typing import Optional
+
+from database.model.payments.payment import Payment
 from ..base import BaseModel
 
 class PaymentProvider(BaseModel, table=True):
@@ -15,3 +17,4 @@ class PaymentProvider(BaseModel, table=True):
     endpoint_url: Optional[str] = Field(default=None)
     is_active: bool = Field(default=True)
     metadata_: Optional[str] = Field(default=None)  # JSON stored as string
+    payments: list["Payment"] = Relationship(back_populates="payment_provider")

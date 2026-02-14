@@ -3,6 +3,7 @@ from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
 from typing import Optional
 
+from database.model.payments.payment import Payment
 from database.model.treasury.funding_transfer import FundingTransfer
 from database.model.treasury.fund_reservation import FundReservation
 from database.model.treasury.cash_position import CashPosition
@@ -19,6 +20,7 @@ class Company(BaseModel, table=True):
     subscription_tier: Optional[str] = Field(default=None)
     subscription_status: Optional[str] = Field(default=None)
     note: Optional[str] = Field(default=None)
+    payments: list["Payment"] = Relationship(back_populates="company")
 
     cash_positions: list["CashPosition"] = Relationship(back_populates="company")
     fund_reservations: list["FundReservation"] = Relationship(back_populates="company")
