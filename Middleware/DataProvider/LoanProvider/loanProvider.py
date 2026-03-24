@@ -242,3 +242,16 @@ class LoanProvider:
         random_suffix = "".join(random.choices(string.digits, k=4))
 
         return f"LN-{timestamp}-{random_suffix}"
+    
+    def list_loans_by_company(self, company_id: UUID) -> List[Loan]:
+        """
+        List all loans for a specific company (tenant).
+
+        Args:
+            company_id (UUID): Company identifier.
+
+        Returns:
+            List[Loan]: All loans belonging to the company.
+        """
+        statement = select(Loan).where(Loan.company_id == company_id)
+        return list(self.session.exec(statement).all())
