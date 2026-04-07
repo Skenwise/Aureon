@@ -1,27 +1,22 @@
-# tests/conftest.py
-# ISOLATION LAYER: State destroyed after every test function.
+"""
+Isolated test harness for Aureon database tests.
+"""
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlmodel import SQLModel
 
 
-@pytest.fixture(scope="function", name="db_session")
-def db_session_fixture():
-    """Provides a clean database session for each test.
+@pytest.fixture(scope="function")
+async def db_session():
+    """Provides an async database session for each test."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     
-    Creates an in-memory SQLite database with all tables.
-    Destroys all data and closes the connection after the test finishes.
-    """
-    engine = create_engine("sqlite:///:memory:", echo=False)
-    SQLModel.metadata.create_all(engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
     
-    session = Session(engine)
-    
-    try:
+    async with AsyncSession(engine, expire_on_commit=False) as session:
         yield session
-    finally:
-        session.close()
-        SQLModel.metadata.drop_all(engine)
-        engine.dispose()
+        await session.rollback()
+    
+    await engine.dispose()
