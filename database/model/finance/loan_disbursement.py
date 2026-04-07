@@ -4,7 +4,6 @@ from uuid import UUID
 from datetime import date
 from typing import Optional
 from database.model.base import BaseModel
-
 # only import for type checking to avoid circular imports
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
