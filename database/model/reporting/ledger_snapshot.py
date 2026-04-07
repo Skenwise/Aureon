@@ -9,7 +9,7 @@ Used for fast balance sheet and income statement queries.
 
 from sqlmodel import SQLModel, Field, Index
 from uuid import UUID, uuid4
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 from database.model.base import BaseModel
@@ -39,4 +39,4 @@ class LedgerSnapshot(BaseModel, table=True):
     debit_count: int = Field(default=0)
     credit_count: int = Field(default=0)
     
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

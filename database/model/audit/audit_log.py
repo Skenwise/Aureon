@@ -1,7 +1,7 @@
 # models/audit/audit_log.py
 from sqlmodel import SQLModel, Field
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from pydantic import field_validator
 import ipaddress
@@ -26,7 +26,8 @@ class AuditLog(BaseModel, table=True):
         description="The ID of the user who performed the action"
     )
 
-    performed_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    # Fixed: timezone-aware UTC
+    performed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     ip_address: Optional[str] = Field(default=None, max_length=45)
     changes: Optional[str] = Field(default=None, description="JSON-encoded changes")
     metadata_: Optional[str] = Field(default=None, description="Additional metadata")

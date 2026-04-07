@@ -1,7 +1,7 @@
 # models/audit/reconciliation.py
 from sqlmodel import SQLModel, Field
 from uuid import UUID
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 from pydantic import field_validator
 from database.model.base import BaseModel
@@ -24,7 +24,8 @@ class Reconciliation(BaseModel, table=True):
 
     balanced: bool = Field(index=True)
 
-    calculated_at: datetime = Field(default_factory=datetime.utcnow)
+    # Fixed: timezone-aware UTC
+    calculated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     calculated_by: Optional[UUID] = Field(foreign_key="user.id", default=None)
     notes: Optional[str] = Field(default=None, max_length=500)
 
