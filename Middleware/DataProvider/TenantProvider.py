@@ -1,5 +1,5 @@
-# Middleware/DataProvider/TenantProvider.py
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Optional
 from uuid import UUID
 from database.model.core.company import Company
@@ -11,7 +11,7 @@ class TenantProvider:
     Handles all database interactions for tenants.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize the provider with a database session.
 
@@ -20,7 +20,7 @@ class TenantProvider:
         """
         self.session = session
 
-    def create_tenant(self, tenant_data: dict) -> Company:
+    async def create_tenant(self, tenant_data: dict) -> Company:
         """
         Create a new tenant in the database.
 
@@ -32,11 +32,11 @@ class TenantProvider:
         """
         tenant = Company(**tenant_data)
         self.session.add(tenant)
-        self.session.commit()
-        self.session.refresh(tenant)
+        await self.session.commit()
+        await self.session.refresh(tenant)
         return tenant
 
-    def get_tenant_by_id(self, tenant_id: UUID) -> Optional[Company]:
+    async def get_tenant_by_id(self, tenant_id: UUID) -> Optional[Company]:
         """
         Retrieve a tenant by ID.
 
@@ -46,9 +46,9 @@ class TenantProvider:
         Returns:
             The Company instance if found, None otherwise.
         """
-        return self.session.get(Company, tenant_id)
+        return await self.session.get(Company, tenant_id)
 
-    def get_tenant_by_code(self, code: str) -> Optional[Company]:
+    async def get_tenant_by_code(self, code: str) -> Optional[Company]:
         """
         Retrieve a tenant by code.
 
@@ -58,10 +58,11 @@ class TenantProvider:
         Returns:
             The Company instance if found, None otherwise.
         """
-        statement = select(Company).where(Company.code == code)
-        return self.session.exec(statement).first()
+        statement = select(Company).where(Company.code == code)  # type: ignore
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
 
-    def update_tenant(self, tenant: Company, update_data: dict) -> Company:
+    async def update_tenant(self, tenant: Company, update_data: dict) -> Company:
         """
         Update an existing tenant.
 
@@ -74,11 +75,11 @@ class TenantProvider:
         """
         for key, value in update_data.items():
             setattr(tenant, key, value)
-        self.session.commit()
-        self.session.refresh(tenant)
+        await self.session.commit()
+        await self.session.refresh(tenant)
         return tenant
 
-    def list_tenants(self) -> List[Company]:
+    async def list_tenants(self) -> List[Company]:
         """
         List all tenants.
 
@@ -86,9 +87,10 @@ class TenantProvider:
             List of all Company instances.
         """
         statement = select(Company)
-        return list(self.session.exec(statement).all())
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
 
-    def check_code_exists(self, code: str, exclude_id: Optional[UUID] = None) -> bool:
+    async def check_code_exists(self, code: str, exclude_id: Optional[UUID] = None) -> bool:
         """
         Check if a tenant code already exists.
 
@@ -99,7 +101,8 @@ class TenantProvider:
         Returns:
             True if code exists, False otherwise.
         """
-        query = select(Company).where(Company.code == code)
+        query = select(Company).where(Company.code == code)  # type: ignore
         if exclude_id:
             query = query.where(Company.id != exclude_id)
-        return self.session.exec(query).first() is not None
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none() is not None

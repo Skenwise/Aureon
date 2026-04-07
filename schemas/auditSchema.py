@@ -126,7 +126,7 @@ class AuditLogRead(BaseModel):
     created_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # allows compatibility with ORM models
 
 
 class AuditLogFilter(BaseModel):
@@ -235,4 +235,4 @@ class ReconciliationRead(BaseModel):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # allows compatibility with ORM models

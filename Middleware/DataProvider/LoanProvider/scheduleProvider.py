@@ -1,4 +1,3 @@
-# Middleware/DataProvider/LoanProvider/scheduleProvider.py
 """
 Schedule Data Provider.
 
@@ -9,12 +8,12 @@ It does NOT process payments.
 It only manages schedule state.
 """
 
-from typing import List, Optional, cast
+from typing import List, Optional
 from uuid import UUID
 from datetime import date
 from dateutil.relativedelta import relativedelta
-from sqlmodel import Session, select
-from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from database.model.finance.loan_schedule import LoanSchedule
 from database.model.finance.loan import Loan
@@ -40,12 +39,12 @@ class ScheduleProvider:
     - Balance calculations
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize provider with database session.
 
         Args:
-            session (Session): Active SQLModel session.
+            session (AsyncSession): Active SQLAlchemy async session.
         """
         self.session = session
 
@@ -53,7 +52,7 @@ class ScheduleProvider:
     # Schedule generation
     # ------------------------------------------------------------
 
-    def generate_schedule(self, schedule_data: dict) -> dict:
+    async def generate_schedule(self, schedule_data: dict) -> dict:
         """
         Generate complete repayment schedule for a loan.
 
@@ -73,7 +72,7 @@ class ScheduleProvider:
         start_date = require(schedule_data, "start_date", cast_date)
         frequency = require(schedule_data, "frequency", str)
         
-        loan = self.session.get(Loan, loan_id)
+        loan = await self.session.get(Loan, loan_id)
 
         if not loan:
             raise NotFoundError("Loan", str(loan_id))
@@ -100,16 +99,16 @@ class ScheduleProvider:
             )
             self.session.add(installment)
 
-        self.session.commit()
+        await self.session.commit()
 
         # Return complete schedule
-        return self._build_schedule_response(loan_id)
+        return await self._build_schedule_response(loan_id)
 
     # ------------------------------------------------------------
     # Schedule retrieval
     # ------------------------------------------------------------
 
-    def get_schedule(self, loan_id: UUID) -> dict:
+    async def get_schedule(self, loan_id: UUID) -> dict:
         """
         Retrieve complete schedule for a loan.
 
@@ -124,20 +123,21 @@ class ScheduleProvider:
         """
         statement = select(LoanSchedule).where(
             LoanSchedule.loan_id == loan_id
-        ).order_by(cast(ColumnElement, LoanSchedule.installment_number))
+        ).order_by(LoanSchedule.installment_number)
 
-        installments = self.session.exec(statement).all()
+        result = await self.session.execute(statement)
+        installments = list(result.scalars().all())
 
         if not installments:
             raise NotFoundError("LoanSchedule", str(loan_id))
 
-        return self._build_schedule_response(loan_id)
+        return await self._build_schedule_response(loan_id)
 
     # ------------------------------------------------------------
     # Single installment
     # ------------------------------------------------------------
 
-    def get_installment(self, installment_id: UUID) -> LoanSchedule:
+    async def get_installment(self, installment_id: UUID) -> LoanSchedule:
         """
         Retrieve a single installment by ID.
 
@@ -150,14 +150,14 @@ class ScheduleProvider:
         Raises:
             NotFoundError: If installment does not exist.
         """
-        installment = self.session.get(LoanSchedule, installment_id)
+        installment = await self.session.get(LoanSchedule, installment_id)
 
         if not installment:
             raise NotFoundError("LoanSchedule", str(installment_id))
 
         return installment
 
-    def get_next_due_installment(self, loan_id: UUID) -> Optional[LoanSchedule]:
+    async def get_next_due_installment(self, loan_id: UUID) -> Optional[LoanSchedule]:
         """
         Get next unpaid installment for a loan.
 
@@ -172,15 +172,16 @@ class ScheduleProvider:
         statement = select(LoanSchedule).where(
             LoanSchedule.loan_id == loan_id,
             LoanSchedule.status == "PENDING"
-        ).order_by(cast(ColumnElement, LoanSchedule.installment_number))
+        ).order_by(LoanSchedule.installment_number)
 
-        return self.session.exec(statement).first()
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
 
     # ------------------------------------------------------------
     # Installment status update
     # ------------------------------------------------------------
 
-    def update_installment_status(
+    async def update_installment_status(
         self,
         installment_id: UUID,
         status: str,
@@ -200,7 +201,7 @@ class ScheduleProvider:
         Raises:
             NotFoundError: If installment does not exist.
         """
-        installment = self.get_installment(installment_id)
+        installment = await self.get_installment(installment_id)
 
         installment.status = status
 
@@ -208,8 +209,8 @@ class ScheduleProvider:
             installment.paid_date = date.today()
 
         self.session.add(installment)
-        self.session.commit()
-        self.session.refresh(installment)
+        await self.session.commit()
+        await self.session.refresh(installment)
 
         return installment
 
@@ -271,7 +272,7 @@ class ScheduleProvider:
 
         return installments
 
-    def _build_schedule_response(self, loan_id: UUID) -> dict:
+    async def _build_schedule_response(self, loan_id: UUID) -> dict:
         """
         Build complete schedule response with aggregated totals.
 
@@ -283,9 +284,10 @@ class ScheduleProvider:
         """
         statement = select(LoanSchedule).where(
             LoanSchedule.loan_id == loan_id
-        ).order_by(cast(ColumnElement, LoanSchedule.installment_number))
+        ).order_by(LoanSchedule.installment_number)
 
-        installments = list(self.session.exec(statement).all())
+        result = await self.session.execute(statement)
+        installments = list(result.scalars().all())
 
         total_principal = sum(inst.principal_due for inst in installments)
         total_interest = sum(inst.interest_due for inst in installments)

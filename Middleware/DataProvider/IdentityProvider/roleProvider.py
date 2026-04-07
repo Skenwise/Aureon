@@ -1,88 +1,77 @@
-#Middleware/DataProvider/IdentityProvider/roleProvider.py
-
 """
-Security role provider.
-
-Provides read-only access to immutable security roles.
-Acts as the persistence boundary for role-based authorization.
+Role data provider.
+Provides database access for SecurityRole model.
 """
-
-from typing import Optional, List
+from typing import List, Optional
 from uuid import UUID
-
-from sqlmodel import Session, select
-
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from database.model.security.role import SecurityRole
+from backend.core.error import NotFoundError
 
 
 class SecurityRoleProvider:
     """
-    Read-only provider for security roles.
-
-    This provider enforces immutability by exposing only
-    retrieval and resolution operations.
+    Provider for role queries and operations.
     """
-
-    def __init__(self, session: Session) -> None:
+    
+    def __init__(self, session: AsyncSession):
         """
-        Initialize the role provider.
-
-        Args:
-            session: Active database session.
+        Initialize the provider with a database session.
         """
-        self._session = session
-
-    def get_by_id(self, role_id: UUID) -> Optional[SecurityRole]:
+        self.session = session
+    
+    async def create_role(self, role: SecurityRole) -> SecurityRole:
         """
-        Retrieve a role by its unique identifier.
-
-        Args:
-            role_id: Role UUID.
-
-        Returns:
-            The SecurityRole if found, otherwise None.
+        Create a new role.
         """
-        statement = select(SecurityRole).where(SecurityRole.id == role_id)
-        return self._session.exec(statement).one_or_none()
-
-    def get_by_name(self, name: str) -> Optional[SecurityRole]:
+        self.session.add(role)
+        await self.session.commit()
+        await self.session.refresh(role)
+        return role
+    
+    async def get_role(self, role_id: UUID) -> SecurityRole:
         """
-        Retrieve a role by its unique name.
-
-        Args:
-            name: Role name.
-
-        Returns:
-            The SecurityRole if found, otherwise None.
+        Retrieve a role by its unique ID.
         """
-        statement = select(SecurityRole).where(SecurityRole.name == name)
-        return self._session.exec(statement).one_or_none()
-
-    def list_all(self) -> List[SecurityRole]:
+        role = await self.session.get(SecurityRole, role_id)
+        if not role:
+            raise NotFoundError("Role", str(role_id))
+        return role
+    
+    async def get_role_by_name(self, name: str) -> Optional[SecurityRole]:
         """
-        List all defined security roles.
-
-        Returns:
-            List of all SecurityRole records.
+        Retrieve a role by its name.
         """
-        statement = select(SecurityRole)
-        return list(self._session.exec(statement).all())
-
-    def resolve_permissions(self, role_id: UUID) -> List[str]:
+        stmt = select(SecurityRole).where(SecurityRole.name == name)  # type: ignore
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+    
+    async def list_roles(self) -> List[SecurityRole]:
         """
-        Resolve permission codes for a given role.
-
-        Args:
-            role_id: Role UUID.
-
-        Returns:
-            List of permission codes.
-
-        Raises:
-            ValueError: If the role does not exist.
+        List all roles.
         """
-        role = self.get_by_id(role_id)
-        if role is None:
-            raise ValueError(f"SecurityRole not found: {role_id}")
-
-        return list(role.permissions)
+        stmt = select(SecurityRole)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+    
+    async def update_role(self, role_id: UUID, updated_fields: dict) -> SecurityRole:
+        """
+        Update an existing role.
+        """
+        role = await self.get_role(role_id)
+        for key, value in updated_fields.items():
+            if hasattr(role, key):
+                setattr(role, key, value)
+        self.session.add(role)
+        await self.session.commit()
+        await self.session.refresh(role)
+        return role
+    
+    async def delete_role(self, role_id: UUID) -> None:
+        """
+        Delete a role.
+        """
+        role = await self.get_role(role_id)
+        await self.session.delete(role)
+        await self.session.commit()

@@ -1,4 +1,3 @@
-# Middleware/DataProvider/PaymentProvider/inboundProvider.py
 """
 Inbound Payment Data Provider.
 
@@ -12,7 +11,8 @@ Verification coordination happens at the adapter/service layer.
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timezone
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from database.model.payments.payment import Payment
 from database.model.payments.payment_execution import PaymentExecution
@@ -41,12 +41,12 @@ class InboundPaymentProvider:
     Orchestration happens at adapter/service layer.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize provider with database session.
 
         Args:
-            session (Session): Active SQLModel session.
+            session (AsyncSession): Active SQLAlchemy async session.
         """
         self.session = session
 
@@ -54,7 +54,7 @@ class InboundPaymentProvider:
     # Inbound payment creation
     # ------------------------------------------------------------
 
-    def create_inbound_payment(self, payment_data: dict) -> Payment:
+    async def create_inbound_payment(self, payment_data: dict) -> Payment:
         """
         Create an inbound payment record.
 
@@ -93,8 +93,8 @@ class InboundPaymentProvider:
         )
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
@@ -102,7 +102,7 @@ class InboundPaymentProvider:
     # Payment retrieval
     # ------------------------------------------------------------
 
-    def get_inbound_payment(self, payment_id: UUID) -> Payment:
+    async def get_inbound_payment(self, payment_id: UUID) -> Payment:
         """
         Retrieve inbound payment by ID.
 
@@ -115,14 +115,14 @@ class InboundPaymentProvider:
         Raises:
             NotFoundError: If payment does not exist.
         """
-        payment = self.session.get(Payment, payment_id)
+        payment = await self.session.get(Payment, payment_id)
 
         if not payment or payment.payment_type != "INBOUND":
             raise NotFoundError("InboundPayment", str(payment_id))
 
         return payment
 
-    def get_payment_by_number(self, payment_number: str) -> Payment:
+    async def get_payment_by_number(self, payment_number: str) -> Payment:
         """
         Retrieve inbound payment by payment number.
 
@@ -136,17 +136,18 @@ class InboundPaymentProvider:
             NotFoundError: If payment does not exist.
         """
         statement = select(Payment).where(
-            Payment.payment_number == payment_number,
+            Payment.payment_number == payment_number,  # type: ignore
             Payment.payment_type == "INBOUND"
         )
-        payment = self.session.exec(statement).first()
+        result = await self.session.execute(statement)
+        payment = result.scalar_one_or_none()
 
         if not payment:
             raise NotFoundError("InboundPayment", payment_number)
 
         return payment
 
-    def get_payment_by_provider_reference(self, provider_reference: str) -> Payment:
+    async def get_payment_by_provider_reference(self, provider_reference: str) -> Payment:
         """
         Retrieve inbound payment by provider reference.
 
@@ -163,7 +164,8 @@ class InboundPaymentProvider:
             Payment.provider_reference == provider_reference,
             Payment.payment_type == "INBOUND"
         )
-        payment = self.session.exec(statement).first()
+        result = await self.session.execute(statement)
+        payment = result.scalar_one_or_none()
 
         if not payment:
             raise NotFoundError("InboundPayment", provider_reference)
@@ -174,7 +176,7 @@ class InboundPaymentProvider:
     # List inbound payments
     # ------------------------------------------------------------
 
-    def list_inbound_payments(
+    async def list_inbound_payments(
         self,
         destination_account_id: Optional[UUID] = None,
         status: Optional[str] = None
@@ -197,13 +199,14 @@ class InboundPaymentProvider:
         if status:
             statement = statement.where(Payment.status == status)
 
-        return list(self.session.exec(statement).all())
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
 
     # ------------------------------------------------------------
     # Payment processing
     # ------------------------------------------------------------
 
-    def process_payment(self, payment_id: UUID) -> Payment:
+    async def process_payment(self, payment_id: UUID) -> Payment:
         """
         Process an inbound payment.
 
@@ -227,7 +230,7 @@ class InboundPaymentProvider:
             NotFoundError: If payment does not exist.
             ValidationError: If payment cannot be processed.
         """
-        payment = self.get_inbound_payment(payment_id)
+        payment = await self.get_inbound_payment(payment_id)
 
         if payment.status != "PENDING":
             raise ValidationError(
@@ -238,12 +241,12 @@ class InboundPaymentProvider:
         payment.processed_at = datetime.now(timezone.utc)
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
-    def complete_payment(self, payment_id: UUID) -> Payment:
+    async def complete_payment(self, payment_id: UUID) -> Payment:
         """
         Mark payment as completed after successful processing.
 
@@ -256,17 +259,17 @@ class InboundPaymentProvider:
         Raises:
             NotFoundError: If payment does not exist.
         """
-        payment = self.get_inbound_payment(payment_id)
+        payment = await self.get_inbound_payment(payment_id)
 
         payment.status = "COMPLETED"
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
-    def fail_payment(self, payment_id: UUID, error_message: str) -> Payment:
+    async def fail_payment(self, payment_id: UUID, error_message: str) -> Payment:
         """
         Mark payment as failed.
 
@@ -280,14 +283,14 @@ class InboundPaymentProvider:
         Raises:
             NotFoundError: If payment does not exist.
         """
-        payment = self.get_inbound_payment(payment_id)
+        payment = await self.get_inbound_payment(payment_id)
 
         payment.status = "FAILED"
         payment.notes = f"{payment.notes or ''}\nFailed: {error_message}"
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
@@ -295,7 +298,7 @@ class InboundPaymentProvider:
     # Payment verification
     # ------------------------------------------------------------
 
-    def verify_payment(self, payment_id: UUID) -> Payment:
+    async def verify_payment(self, payment_id: UUID) -> Payment:
         """
         Mark payment as verified.
 
@@ -308,13 +311,13 @@ class InboundPaymentProvider:
         Raises:
             NotFoundError: If payment does not exist.
         """
-        payment = self.get_inbound_payment(payment_id)
+        payment = await self.get_inbound_payment(payment_id)
 
         payment.status = "VERIFIED"
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
@@ -322,7 +325,7 @@ class InboundPaymentProvider:
     # Execution tracking
     # ------------------------------------------------------------
 
-    def create_verification_attempt(
+    async def create_verification_attempt(
         self,
         payment_id: UUID,
         provider_id: Optional[UUID] = None,
@@ -347,8 +350,8 @@ class InboundPaymentProvider:
         )
 
         self.session.add(execution)
-        self.session.commit()
-        self.session.refresh(execution)
+        await self.session.commit()
+        await self.session.refresh(execution)
 
         return execution
 

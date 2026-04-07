@@ -64,7 +64,7 @@ class LoanRead(BaseModel):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # allows compatibility with ORM models
 
 
 # ==================== SCHEDULE SCHEMAS ====================
@@ -98,7 +98,7 @@ class ScheduleInstallmentRead(BaseModel):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # allows compatibility with ORM models
 
 
 class ScheduleRead(BaseModel):
@@ -113,7 +113,7 @@ class ScheduleRead(BaseModel):
     installments: list[ScheduleInstallmentRead]
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # allows compatibility with ORM models
 
 
 # ==================== DISBURSEMENT SCHEMAS ====================
@@ -157,7 +157,7 @@ class DisbursementRead(BaseModel):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # allows compatibility with ORM models
 
 
 # ==================== REPAYMENT SCHEMAS ====================
@@ -203,7 +203,7 @@ class RepaymentRead(BaseModel):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # allows compatibility with ORM models
 
 
 # ==================== INTEREST CALCULATION SCHEMAS ====================

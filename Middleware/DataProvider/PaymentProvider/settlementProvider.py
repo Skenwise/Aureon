@@ -1,4 +1,3 @@
-# Middleware/DataProvider/PaymentProvider/settlementProvider.py
 """
 Settlement Data Provider.
 
@@ -12,7 +11,8 @@ Execution coordination happens at the adapter/service layer.
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timezone
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, or_
 
 from database.model.payments.payment import Payment
 from backend.core.error import NotFoundError, ValidationError
@@ -39,12 +39,12 @@ class SettlementProvider:
     Orchestration happens at adapter/service layer.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize provider with database session.
 
         Args:
-            session (Session): Active SQLModel session.
+            session (AsyncSession): Active SQLAlchemy async session.
         """
         self.session = session
 
@@ -52,7 +52,7 @@ class SettlementProvider:
     # Settlement creation
     # ------------------------------------------------------------
 
-    def create_settlement(self, settlement_data: dict) -> Payment:
+    async def create_settlement(self, settlement_data: dict) -> Payment:
         """
         Create an internal settlement record.
 
@@ -97,8 +97,8 @@ class SettlementProvider:
         )
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
@@ -106,7 +106,7 @@ class SettlementProvider:
     # Settlement retrieval
     # ------------------------------------------------------------
 
-    def get_settlement(self, settlement_id: UUID) -> Payment:
+    async def get_settlement(self, settlement_id: UUID) -> Payment:
         """
         Retrieve settlement by ID.
 
@@ -119,14 +119,14 @@ class SettlementProvider:
         Raises:
             NotFoundError: If settlement does not exist.
         """
-        payment = self.session.get(Payment, settlement_id)
+        payment = await self.session.get(Payment, settlement_id)
 
         if not payment or payment.payment_type != "SETTLEMENT":
             raise NotFoundError("Settlement", str(settlement_id))
 
         return payment
 
-    def get_settlement_by_number(self, payment_number: str) -> Payment:
+    async def get_settlement_by_number(self, payment_number: str) -> Payment:
         """
         Retrieve settlement by payment number.
 
@@ -143,7 +143,8 @@ class SettlementProvider:
             Payment.payment_number == payment_number,
             Payment.payment_type == "SETTLEMENT"
         )
-        payment = self.session.exec(statement).first()
+        result = await self.session.execute(statement)
+        payment = result.scalar_one_or_none()
 
         if not payment:
             raise NotFoundError("Settlement", payment_number)
@@ -154,7 +155,7 @@ class SettlementProvider:
     # List settlements
     # ------------------------------------------------------------
 
-    def list_settlements(
+    async def list_settlements(
         self,
         account_id: Optional[UUID] = None,
         settlement_type: Optional[str] = None,
@@ -175,8 +176,7 @@ class SettlementProvider:
 
         if account_id:
             statement = statement.where(
-                (Payment.source_account_id == account_id) |
-                (Payment.destination_account_id == account_id)
+                or_(Payment.source_account_id == account_id, Payment.destination_account_id == account_id)
             )
 
         if status:
@@ -185,13 +185,14 @@ class SettlementProvider:
         # Note: settlement_type filtering would require JSON parsing of metadata_
         # Implement if needed
 
-        return list(self.session.exec(statement).all())
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
 
     # ------------------------------------------------------------
     # Settlement execution
     # ------------------------------------------------------------
 
-    def execute_settlement(self, settlement_id: UUID) -> Payment:
+    async def execute_settlement(self, settlement_id: UUID) -> Payment:
         """
         Execute an internal settlement.
 
@@ -214,7 +215,7 @@ class SettlementProvider:
             NotFoundError: If settlement does not exist.
             ValidationError: If settlement cannot be executed.
         """
-        payment = self.get_settlement(settlement_id)
+        payment = await self.get_settlement(settlement_id)
 
         if payment.status != "PENDING":
             raise ValidationError(
@@ -225,12 +226,12 @@ class SettlementProvider:
         payment.processed_at = datetime.now(timezone.utc)
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
-    def complete_settlement(self, settlement_id: UUID) -> Payment:
+    async def complete_settlement(self, settlement_id: UUID) -> Payment:
         """
         Mark settlement as completed.
 
@@ -243,17 +244,17 @@ class SettlementProvider:
         Raises:
             NotFoundError: If settlement does not exist.
         """
-        payment = self.get_settlement(settlement_id)
+        payment = await self.get_settlement(settlement_id)
 
         payment.status = "COMPLETED"
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
-    def fail_settlement(self, settlement_id: UUID, error_message: str) -> Payment:
+    async def fail_settlement(self, settlement_id: UUID, error_message: str) -> Payment:
         """
         Mark settlement as failed.
 
@@ -267,14 +268,14 @@ class SettlementProvider:
         Raises:
             NotFoundError: If settlement does not exist.
         """
-        payment = self.get_settlement(settlement_id)
+        payment = await self.get_settlement(settlement_id)
 
         payment.status = "FAILED"
         payment.notes = f"{payment.notes or ''}\nFailed: {error_message}"
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
@@ -282,7 +283,7 @@ class SettlementProvider:
     # Settlement reversal
     # ------------------------------------------------------------
 
-    def reverse_settlement(self, settlement_id: UUID, reason: str) -> Payment:
+    async def reverse_settlement(self, settlement_id: UUID, reason: str) -> Payment:
         """
         Reverse a completed settlement.
 
@@ -306,7 +307,7 @@ class SettlementProvider:
             NotFoundError: If settlement does not exist.
             ValidationError: If settlement cannot be reversed.
         """
-        payment = self.get_settlement(settlement_id)
+        payment = await self.get_settlement(settlement_id)
 
         if payment.status != "COMPLETED":
             raise ValidationError(
@@ -317,8 +318,8 @@ class SettlementProvider:
         payment.notes = f"{payment.notes or ''}\nReversed: {reason}"
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 

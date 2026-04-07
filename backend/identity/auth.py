@@ -25,7 +25,7 @@ class AuthenticationPort(Protocol):
     details such as hashing algorithms or token mechanisms.
     """
 
-    def authenticate(self, username: str, password: str) -> str:
+    async def authenticate(self, username: str, password: str) -> str:
         """
         Authenticate a user using credentials.
 
@@ -38,6 +38,10 @@ class AuthenticationPort(Protocol):
 
         Raises:
             AuthenticationError: If authentication fails.
+
+        Teaching Point:
+            This method is async because it needs to query the database
+            via the UserProvider, which requires async/await.
         """
         raise NotImplementedError
 
@@ -86,16 +90,16 @@ class AuthenticationAdapter(AuthenticationPort):
         - Token expiry is configurable for flexibility
         """
         self.provider = provider
-        self.secret_key = secret_key or os.environ["JWT_SECRET"]
+        self.secret_key = secret_key or os.environ.get("JWT_SECRET", "dev-secret-key-change-in-production")
         self.token_expiry_hours = token_expiry_hours
         self.algorithm = "HS256"
 
-    def authenticate(self, username: str, password: str) -> str:
+    async def authenticate(self, username: str, password: str) -> str:
         """
         Authenticate a user and return a JWT token.
 
         Process:
-        1. Retrieve user from provider by username
+        1. Retrieve user from provider by username (async)
         2. Verify password against stored hash
         3. Generate JWT token with user claims
 
@@ -113,8 +117,9 @@ class AuthenticationAdapter(AuthenticationPort):
         - We fetch the user first, then verify the password
         - Password verification uses bcrypt (constant-time comparison)
         - Token generation includes user_id and username as claims
+        - This method is async because it awaits the provider's database call
         """
-        user = self.provider.get_user_by_username(username)
+        user = await self.provider.get_user_by_username(username)
 
         if not user:
             raise AuthenticationError("Invalid username or password")

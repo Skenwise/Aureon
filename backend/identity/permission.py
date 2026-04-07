@@ -8,11 +8,9 @@ Permissions are evaluated deterministically and are read-only.
 """
 
 from typing import Protocol
-from backend.core.error import AuthorizationError
+from uuid import UUID
 from backend.core.error import AuthorizationError
 from Middleware.DataProvider.IdentityProvider.permissionProvider import SecurityPermissionProvider
-from .permission import PermissionPort
-from uuid import UUID
 
 
 class PermissionPort(Protocol):
@@ -48,7 +46,6 @@ class PermissionPort(Protocol):
             AuthorizationError: If the permission is not granted.
         """
         raise NotImplementedError
-    
 
 
 class PermissionAdapter(PermissionPort):
@@ -100,4 +97,3 @@ class PermissionAdapter(PermissionPort):
             raise AuthorizationError(
                 f"User '{user_id}' lacks required permission '{permission}'"
             )
-

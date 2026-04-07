@@ -1,55 +1,77 @@
-# Middleware/DataProvider/IdentityProvider/permissionProvider.py
 """
 Permission data provider.
-Provides database access for SecurityPermission and RolePermission models.
-Supports read-only operations for immutable roles and permissions.
+Provides database access for SecurityPermission and RolePermissionLink models.
 """
 from typing import List
 from uuid import UUID
-from sqlmodel import select, Session
-from database.model.security.permission import SecurityPermission, RolePermission
-from backend.core.error import NotFoundError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from database.model.security.permission import SecurityPermission
+from database.model.security.role import RolePermissionLink
 from database.model.security.user import SecurityUser
+from backend.core.error import NotFoundError
 
 
 class SecurityPermissionProvider:
     """
     Provider for permission and role-permission queries.
-    Encapsulates all database logic for retrieving permissions
-    and role-to-permission mappings.
     """
     
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize the provider with a database session.
-        
-        Args:
-            session (Session): SQLModel session for DB operations.
         """
         self.session = session
     
-    def get_permission_by_code(self, code: str) -> SecurityPermission:
+    async def get_permission_by_name(self, name: str) -> SecurityPermission:
         """
-        Retrieve a permission by its code.
+        Retrieve a permission by its name.
         
         Args:
-            code (str): Unique machine-readable permission code.
+            name (str): Permission name (e.g., "loan.create").
         
         Returns:
             SecurityPermission: Permission object if found.
         
         Raises:
-            NotFoundError: If no permission with the given code exists.
+            NotFoundError: If no permission with the given name exists.
         """
-        stmt = select(SecurityPermission).where(SecurityPermission.code == code)
-        permission = self.session.exec(stmt).first()
+        stmt = select(SecurityPermission).where(SecurityPermission.name == name)  # type: ignore
+        result = await self.session.execute(stmt)
+        permission = result.scalar_one_or_none()
         
         if not permission:
-            raise NotFoundError("Permission", code)
+            raise NotFoundError("Permission", name)
         
         return permission
     
-    def list_permissions(self) -> List[SecurityPermission]:
+    async def get_permission_by_resource_action(self, resource: str, action: str) -> SecurityPermission:
+        """
+        Retrieve a permission by resource and action.
+        
+        Args:
+            resource (str): Resource name (e.g., "loan").
+            action (str): Action name (e.g., "create").
+        
+        Returns:
+            SecurityPermission: Permission object if found.
+        
+        Raises:
+            NotFoundError: If no permission exists.
+        """
+        stmt = select(SecurityPermission).where(
+            SecurityPermission.resource == resource,  # type: ignore
+            SecurityPermission.action == action  # type: ignore
+        )
+        result = await self.session.execute(stmt)
+        permission = result.scalar_one_or_none()
+        
+        if not permission:
+            raise NotFoundError("Permission", f"{resource}.{action}")
+        
+        return permission
+    
+    async def list_permissions(self) -> List[SecurityPermission]:
         """
         List all permissions in the system.
         
@@ -57,9 +79,10 @@ class SecurityPermissionProvider:
             List[SecurityPermission]: All available permissions.
         """
         stmt = select(SecurityPermission)
-        return list(self.session.exec(stmt).all())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
     
-    def get_permissions_for_role(self, role_id: UUID) -> List[SecurityPermission]:
+    async def get_permissions_for_role(self, role_id: UUID) -> List[SecurityPermission]:
         """
         Retrieve all permissions granted to a specific role.
         
@@ -71,60 +94,62 @@ class SecurityPermissionProvider:
         """
         stmt = (
             select(SecurityPermission)
-            .join(RolePermission).where(SecurityPermission.id == RolePermission.permission_id)
-            .where(RolePermission.role_id == role_id)
+            .join(RolePermissionLink, SecurityPermission.id == RolePermissionLink.permission_id) # type: ignore
+            .where(RolePermissionLink.role_id == role_id)
         )
         
-        permissions = list(self.session.exec(stmt).all())
+        result = await self.session.execute(stmt)
+        permissions = list(result.scalars().all())
         return permissions
     
-    def get_roles_with_permission(self, permission_code: str) -> List[UUID]:
+    async def get_roles_with_permission(self, permission_name: str) -> List[UUID]:
         """
         Retrieve role IDs that include a specific permission.
         
         Args:
-            permission_code (str): Permission code to filter by.
+            permission_name (str): Permission name to filter by.
         
         Returns:
             List[UUID]: List of role IDs granting this permission.
         """
-        permission = self.get_permission_by_code(permission_code)
+        permission = await self.get_permission_by_name(permission_name)
         
-        stmt = select(RolePermission.role_id).where(
-            RolePermission.permission_id == permission.id
+        stmt = select(RolePermissionLink.role_id).where(
+            RolePermissionLink.permission_id == permission.id
         )
-        
-        return list(self.session.exec(stmt).all())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
     
-
-    def user_has_permission(self, user_id: UUID, permission_code: str) -> bool:
+    async def user_has_permission(self, user_id: UUID, permission_name: str) -> bool:
         """
         Check if the user has a specific permission via their assigned role.
 
         Args:
             user_id (UUID): ID of the user.
-            permission_code (str): Permission code to check.
+            permission_name (str): Permission name to check.
 
         Returns:
             bool: True if the user has the permission, False otherwise.
         """
         # 1. Get the user's role_id
-        stmt_user = select(SecurityUser.role_id).where(SecurityUser.id == user_id)
-        role_id = self.session.exec(stmt_user).first()
+        stmt_user = select(SecurityUser.role_id).where(SecurityUser.id == user_id)  # type: ignore
+        result_user = await self.session.execute(stmt_user)
+        role_id = result_user.scalar()
 
         if not role_id:
             return False  # user has no role assigned
 
         # 2. Get the permission object
         try:
-            permission = self.get_permission_by_code(permission_code)
+            permission = await self.get_permission_by_name(permission_name)
         except NotFoundError:
             return False
 
         # 3. Check if the role grants this permission
         stmt_check = (
-            select(RolePermission.role_id)
-            .where(RolePermission.role_id == role_id)
-            .where(RolePermission.permission_id == permission.id)
+            select(RolePermissionLink.role_id)
+            .where(RolePermissionLink.role_id == role_id)
+            .where(RolePermissionLink.permission_id == permission.id)
         )
-        return bool(self.session.exec(stmt_check).first())
+        result_check = await self.session.execute(stmt_check)
+        return bool(result_check.scalar())

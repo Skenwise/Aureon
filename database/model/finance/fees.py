@@ -2,9 +2,11 @@
 from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
 from datetime import date
-from typing import Optional
-from ..base import BaseModel
-from ..finance.loan import Loan
+from typing import Optional, TYPE_CHECKING
+from database.model.base import BaseModel
+
+if TYPE_CHECKING:
+    from database.model.finance.loan import Loan
 
 class Fee(BaseModel, table=True):
     """
@@ -19,4 +21,4 @@ class Fee(BaseModel, table=True):
     metadata_: Optional[str] = Field(default=None)
 
     # Relationships
-    loan: Optional[Loan] = Relationship(back_populates="fees")
+    loan: Optional["Loan"] = Relationship(back_populates="fees")

@@ -1,4 +1,3 @@
-# Middleware/DataProvider/PaymentProvider/outboundProvider.py
 """
 Outbound Payment Data Provider.
 
@@ -12,7 +11,8 @@ Execution coordination happens at the adapter/service layer.
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timezone
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from database.model.payments.payment import Payment
 from database.model.payments.payment_execution import PaymentExecution
@@ -41,12 +41,12 @@ class OutboundPaymentProvider:
     Orchestration happens at adapter/service layer.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize provider with database session.
 
         Args:
-            session (Session): Active SQLModel session.
+            session (AsyncSession): Active SQLAlchemy async session.
         """
         self.session = session
 
@@ -54,7 +54,7 @@ class OutboundPaymentProvider:
     # Outbound payment creation
     # ------------------------------------------------------------
 
-    def create_outbound_payment(self, payment_data: dict) -> Payment:
+    async def create_outbound_payment(self, payment_data: dict) -> Payment:
         """
         Create an outbound payment record.
 
@@ -92,8 +92,8 @@ class OutboundPaymentProvider:
         )
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
@@ -101,7 +101,7 @@ class OutboundPaymentProvider:
     # Payment retrieval
     # ------------------------------------------------------------
 
-    def get_outbound_payment(self, payment_id: UUID) -> Payment:
+    async def get_outbound_payment(self, payment_id: UUID) -> Payment:
         """
         Retrieve outbound payment by ID.
 
@@ -114,14 +114,14 @@ class OutboundPaymentProvider:
         Raises:
             NotFoundError: If payment does not exist.
         """
-        payment = self.session.get(Payment, payment_id)
+        payment = await self.session.get(Payment, payment_id)
 
         if not payment or payment.payment_type != "OUTBOUND":
             raise NotFoundError("OutboundPayment", str(payment_id))
 
         return payment
 
-    def get_payment_by_number(self, payment_number: str) -> Payment:
+    async def get_payment_by_number(self, payment_number: str) -> Payment:
         """
         Retrieve outbound payment by payment number.
 
@@ -135,10 +135,11 @@ class OutboundPaymentProvider:
             NotFoundError: If payment does not exist.
         """
         statement = select(Payment).where(
-            Payment.payment_number == payment_number,
+            Payment.payment_number == payment_number,  # type: ignore
             Payment.payment_type == "OUTBOUND"
         )
-        payment = self.session.exec(statement).first()
+        result = await self.session.execute(statement)
+        payment = result.scalar_one_or_none()
 
         if not payment:
             raise NotFoundError("OutboundPayment", payment_number)
@@ -149,7 +150,7 @@ class OutboundPaymentProvider:
     # List outbound payments
     # ------------------------------------------------------------
 
-    def list_outbound_payments(
+    async def list_outbound_payments(
         self,
         source_account_id: Optional[UUID] = None,
         status: Optional[str] = None
@@ -164,21 +165,22 @@ class OutboundPaymentProvider:
         Returns:
             List[Payment]
         """
-        statement = select(Payment).where(Payment.payment_type == "OUTBOUND")
+        statement = select(Payment).where(Payment.payment_type == "OUTBOUND")  # type: ignore
 
         if source_account_id:
-            statement = statement.where(Payment.source_account_id == source_account_id)
+            statement = statement.where(Payment.source_account_id == source_account_id)  # type: ignore
 
         if status:
-            statement = statement.where(Payment.status == status)
+            statement = statement.where(Payment.status == status)  # type: ignore
 
-        return list(self.session.exec(statement).all())
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
 
     # ------------------------------------------------------------
     # Payment execution
     # ------------------------------------------------------------
 
-    def execute_payment(self, payment_id: UUID) -> Payment:
+    async def execute_payment(self, payment_id: UUID) -> Payment:
         """
         Execute an outbound payment.
 
@@ -203,7 +205,7 @@ class OutboundPaymentProvider:
             NotFoundError: If payment does not exist.
             ValidationError: If payment cannot be executed.
         """
-        payment = self.get_outbound_payment(payment_id)
+        payment = await self.get_outbound_payment(payment_id)
 
         if payment.status != "PENDING":
             raise ValidationError(
@@ -214,12 +216,12 @@ class OutboundPaymentProvider:
         payment.processed_at = datetime.now(timezone.utc)
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
-    def complete_payment(self, payment_id: UUID, provider_reference: str) -> Payment:
+    async def complete_payment(self, payment_id: UUID, provider_reference: str) -> Payment:
         """
         Mark payment as completed after successful execution.
 
@@ -233,18 +235,18 @@ class OutboundPaymentProvider:
         Raises:
             NotFoundError: If payment does not exist.
         """
-        payment = self.get_outbound_payment(payment_id)
+        payment = await self.get_outbound_payment(payment_id)
 
         payment.status = "COMPLETED"
         payment.provider_reference = provider_reference
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
-    def fail_payment(self, payment_id: UUID, error_message: str) -> Payment:
+    async def fail_payment(self, payment_id: UUID, error_message: str) -> Payment:
         """
         Mark payment as failed.
 
@@ -258,14 +260,14 @@ class OutboundPaymentProvider:
         Raises:
             NotFoundError: If payment does not exist.
         """
-        payment = self.get_outbound_payment(payment_id)
+        payment = await self.get_outbound_payment(payment_id)
 
         payment.status = "FAILED"
         payment.notes = f"{payment.notes or ''}\nFailed: {error_message}"
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
@@ -273,7 +275,7 @@ class OutboundPaymentProvider:
     # Payment cancellation
     # ------------------------------------------------------------
 
-    def cancel_payment(self, payment_id: UUID) -> Payment:
+    async def cancel_payment(self, payment_id: UUID) -> Payment:
         """
         Cancel a pending payment.
 
@@ -287,7 +289,7 @@ class OutboundPaymentProvider:
             NotFoundError: If payment does not exist.
             ValidationError: If payment cannot be cancelled.
         """
-        payment = self.get_outbound_payment(payment_id)
+        payment = await self.get_outbound_payment(payment_id)
 
         if payment.status not in ["PENDING", "PROCESSING"]:
             raise ValidationError(
@@ -297,8 +299,8 @@ class OutboundPaymentProvider:
         payment.status = "CANCELLED"
 
         self.session.add(payment)
-        self.session.commit()
-        self.session.refresh(payment)
+        await self.session.commit()
+        await self.session.refresh(payment)
 
         return payment
 
@@ -306,7 +308,7 @@ class OutboundPaymentProvider:
     # Execution tracking
     # ------------------------------------------------------------
 
-    def create_execution_attempt(
+    async def create_execution_attempt(
         self,
         payment_id: UUID,
         provider_id: Optional[UUID] = None,
@@ -331,8 +333,8 @@ class OutboundPaymentProvider:
         )
 
         self.session.add(execution)
-        self.session.commit()
-        self.session.refresh(execution)
+        await self.session.commit()
+        await self.session.refresh(execution)
 
         return execution
 

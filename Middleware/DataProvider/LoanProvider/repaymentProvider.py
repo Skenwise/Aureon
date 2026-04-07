@@ -1,4 +1,3 @@
-# Middleware/DataProvider/LoanProvider/repaymentProvider.py
 """
 Repayment Data Provider.
 
@@ -12,7 +11,8 @@ Execution coordination happens at the service/adapter layer.
 from typing import List
 from uuid import UUID
 from datetime import date
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from database.model.finance.loan_repayment import LoanRepayment
 from database.model.finance.loan import Loan
@@ -41,12 +41,12 @@ class RepaymentProvider:
     Orchestration happens at adapter/service layer.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize provider with database session.
 
         Args:
-            session (Session): Active SQLModel session.
+            session (AsyncSession): Active SQLAlchemy async session.
         """
         self.session = session
 
@@ -54,7 +54,7 @@ class RepaymentProvider:
     # Repayment creation
     # ------------------------------------------------------------
 
-    def create_repayment(self, repayment_data: dict) -> LoanRepayment:
+    async def create_repayment(self, repayment_data: dict) -> LoanRepayment:
         """
         Create a repayment record for a loan.
 
@@ -75,7 +75,7 @@ class RepaymentProvider:
         payment_date = require(repayment_data, "payment_date", cast_date)
         payment_method = require(repayment_data, "payment_method", str)
         
-        loan = self.session.get(Loan, loan_id)
+        loan = await self.session.get(Loan, loan_id)
 
         if not loan:
             raise NotFoundError("Loan", str(loan_id))
@@ -100,8 +100,8 @@ class RepaymentProvider:
         )
 
         self.session.add(repayment)
-        self.session.commit()
-        self.session.refresh(repayment)
+        await self.session.commit()
+        await self.session.refresh(repayment)
 
         return repayment
 
@@ -109,7 +109,7 @@ class RepaymentProvider:
     # Repayment retrieval
     # ------------------------------------------------------------
 
-    def get_repayment(self, repayment_id: UUID) -> LoanRepayment:
+    async def get_repayment(self, repayment_id: UUID) -> LoanRepayment:
         """
         Retrieve repayment by ID.
 
@@ -122,14 +122,14 @@ class RepaymentProvider:
         Raises:
             NotFoundError: If repayment does not exist.
         """
-        repayment = self.session.get(LoanRepayment, repayment_id)
+        repayment = await self.session.get(LoanRepayment, repayment_id)
 
         if not repayment:
             raise NotFoundError("LoanRepayment", str(repayment_id))
 
         return repayment
 
-    def list_repayments(self, loan_id: UUID) -> List[LoanRepayment]:
+    async def list_repayments(self, loan_id: UUID) -> List[LoanRepayment]:
         """
         List all repayments for a specific loan.
 
@@ -143,13 +143,14 @@ class RepaymentProvider:
             LoanRepayment.loan_id == loan_id
         )
 
-        return list(self.session.exec(statement).all())
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
 
     # ------------------------------------------------------------
     # Repayment application
     # ------------------------------------------------------------
 
-    def apply_repayment(self, repayment_id: UUID) -> LoanRepayment:
+    async def apply_repayment(self, repayment_id: UUID) -> LoanRepayment:
         """
         Apply a repayment to the loan.
 
@@ -175,7 +176,7 @@ class RepaymentProvider:
             NotFoundError: If repayment does not exist.
             ValidationError: If repayment already applied.
         """
-        repayment = self.get_repayment(repayment_id)
+        repayment = await self.get_repayment(repayment_id)
 
         if repayment.status != "PENDING":
             raise ValidationError(
@@ -193,12 +194,12 @@ class RepaymentProvider:
         repayment.status = "APPLIED"
 
         self.session.add(repayment)
-        self.session.commit()
-        self.session.refresh(repayment)
+        await self.session.commit()
+        await self.session.refresh(repayment)
 
         return repayment
 
-    def reverse_repayment(
+    async def reverse_repayment(
         self,
         repayment_id: UUID,
         reason: str
@@ -227,7 +228,7 @@ class RepaymentProvider:
             NotFoundError: If repayment does not exist.
             ValidationError: If repayment cannot be reversed.
         """
-        repayment = self.get_repayment(repayment_id)
+        repayment = await self.get_repayment(repayment_id)
 
         if repayment.status != "APPLIED":
             raise ValidationError(
@@ -238,7 +239,7 @@ class RepaymentProvider:
         repayment.notes = f"{repayment.notes or ''}\nReversed: {reason}"
 
         self.session.add(repayment)
-        self.session.commit()
-        self.session.refresh(repayment)
+        await self.session.commit()
+        await self.session.refresh(repayment)
 
         return repayment

@@ -39,4 +39,4 @@ class UserRead(BaseModel):
     updated_at: datetime
 
     class Config:
-        orm_mode = True  # allows compatibility with ORM models
+        from_attributes = True  # allows compatibility with ORM models

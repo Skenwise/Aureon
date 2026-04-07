@@ -3,7 +3,7 @@ from sqlmodel import SQLModel, Field
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
-from ..base import BaseModel
+from database.model.base import BaseModel
 from .currency import Currency
 
 class ExchangeRate(BaseModel, table=True):

@@ -54,4 +54,4 @@ class JournalRead(BaseModel):
 
     class Config:
         """Pydantic ORM compatibility."""
-        orm_mode = True
+        from_attributes = True  # allows compatibility with ORM models

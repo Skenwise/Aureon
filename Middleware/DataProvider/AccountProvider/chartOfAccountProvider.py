@@ -1,5 +1,3 @@
-#Middleware/DataProvider/AccountProvider/chartOfAccountProvider.py
-
 """
 Chart Account data provider.
 
@@ -7,7 +5,8 @@ Handles all database operations for chart-of-accounts entries.
 Ensures deterministic retrieval, uniqueness, and hierarchy validation.
 """
 
-from sqlmodel import Session, select, col
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from uuid import UUID, uuid4
 from datetime import datetime
 from backend.core.error import NotFoundError, ValidationError
@@ -20,17 +19,17 @@ class ChartAccountProvider:
     Encapsulates all DB logic and enforces deterministic validation rules.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize the provider with a database session.
 
         Args:
-            session (Session): SQLModel session for DB operations.
+            session (AsyncSession): SQLAlchemy async session for DB operations.
         """
         self.session = session
 
     # ----------------- Create ----------------- #
-    def create_chart_account(self, account_in: ChartAccountCreate) -> ChartAccount:
+    async def create_chart_account(self, account_in: ChartAccountCreate) -> ChartAccount:
         """
         Create a new chart-of-accounts entry.
 
@@ -43,14 +42,15 @@ class ChartAccountProvider:
         Raises:
             ValidationError: If an account with the same code already exists.
         """
-        stmt = select(ChartAccount).where(ChartAccount.code == account_in.code.upper())
-        existing = self.session.exec(stmt).first()
+        stmt = select(ChartAccount).where(ChartAccount.code == account_in.code.upper())  # type: ignore
+        result = await self.session.execute(stmt)
+        existing = result.scalar_one_or_none()
         if existing:
             raise ValidationError(f"Chart account with code '{account_in.code}' already exists.")
 
         # Validate parent exists if provided
         if account_in.parent_account_id:
-            parent = self.session.get(ChartAccount, account_in.parent_account_id)
+            parent = await self.session.get(ChartAccount, account_in.parent_account_id)
             if not parent:
                 raise ValidationError(f"Parent chart account {account_in.parent_account_id} does not exist.")
 
@@ -67,12 +67,12 @@ class ChartAccountProvider:
         )
 
         self.session.add(new_account)
-        self.session.commit()
-        self.session.refresh(new_account)
+        await self.session.commit()
+        await self.session.refresh(new_account)
         return new_account
 
     # ----------------- Read ----------------- #
-    def get_chart_account(self, account_id: UUID) -> ChartAccount:
+    async def get_chart_account(self, account_id: UUID) -> ChartAccount:
         """
         Retrieve a chart-of-accounts entry by ID.
 
@@ -85,13 +85,13 @@ class ChartAccountProvider:
         Raises:
             NotFoundError: If the chart account does not exist.
         """
-        account = self.session.get(ChartAccount, account_id)
+        account = await self.session.get(ChartAccount, account_id)
         if not account:
             raise NotFoundError("ChartAccount", str(account_id))
         return account
 
     # ----------------- Update ----------------- #
-    def update_chart_account(self, account_id: UUID, updates: dict) -> ChartAccount:
+    async def update_chart_account(self, account_id: UUID, updates: dict) -> ChartAccount:
         """
         Update an existing chart-of-accounts entry.
 
@@ -106,14 +106,14 @@ class ChartAccountProvider:
             NotFoundError: If the chart account does not exist.
             ValidationError: If parent account is invalid.
         """
-        account = self.session.get(ChartAccount, account_id)
+        account = await self.session.get(ChartAccount, account_id)
         if not account:
             raise NotFoundError("ChartAccount", str(account_id))
 
         # Validate parent if updating
         parent_id = updates.get("parent_account_id")
         if parent_id:
-            parent = self.session.get(ChartAccount, parent_id)
+            parent = await self.session.get(ChartAccount, parent_id)
             if not parent:
                 raise ValidationError(f"Parent chart account {parent_id} does not exist.")
 
@@ -125,17 +125,18 @@ class ChartAccountProvider:
         account.version += 1
 
         self.session.add(account)
-        self.session.commit()
-        self.session.refresh(account)
+        await self.session.commit()
+        await self.session.refresh(account)
         return account
 
     # ----------------- List ----------------- #
-    def list_chart_accounts(self) -> list[ChartAccount]:
+    async def list_chart_accounts(self) -> list[ChartAccount]:
         """
         List all chart-of-accounts entries.
 
         Returns:
             List[ChartAccount]: All chart accounts in the system.
         """
-        stmt = select(ChartAccount).order_by(col(ChartAccount.code))
-        return list(self.session.exec(stmt).all())
+        stmt = select(ChartAccount).order_by(ChartAccount.code)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

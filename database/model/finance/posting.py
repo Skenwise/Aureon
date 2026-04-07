@@ -2,7 +2,7 @@
 from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
 from typing import Optional, TYPE_CHECKING
-from ..base import BaseModel
+from database.model.base import BaseModel
 
 # only import for type checking to avoid circular imports
 if TYPE_CHECKING:

@@ -37,4 +37,4 @@ class CurrencyRead(BaseModel):
     updated_at: datetime
 
     class Config:
-        orm_mode = True  # allows compatibility with ORM models
+        from_attribute = True  # allows compatibility with ORM models

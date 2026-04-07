@@ -6,7 +6,7 @@ from typing import Optional
 from pydantic import field_validator
 import ipaddress
 import json
-from ..base import BaseModel
+from database.model.base import BaseModel
 
 
 class AuditLog(BaseModel, table=True):

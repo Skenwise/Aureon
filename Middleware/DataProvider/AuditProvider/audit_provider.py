@@ -1,5 +1,3 @@
-#Middleware/DataProvider/AuditProvider/audit_provider.py
-
 """
 Audit Data Provider.
 
@@ -8,53 +6,56 @@ Provides database access for AuditLog model.
 
 from typing import List, Optional
 from uuid import UUID
-from sqlmodel import select, Session, and_  # ✅ Remove desc from import
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_, desc
 from datetime import datetime
 
 from database.model.audit.audit_log import AuditLog
 from backend.core.error import NotFoundError
 from schemas.auditSchema import AuditLogFilter
-from sqlmodel import desc  # ✅ Import desc here for use in queries
+
 
 class AuditProvider:
     """
     Provider for audit log queries and operations.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         self.session = session
 
     # ----------------- Create ----------------- #
 
-    def create_log(self, audit_log: AuditLog) -> AuditLog:
+    async def create_log(self, audit_log: AuditLog) -> AuditLog:
         """Create an immutable audit log entry."""
         self.session.add(audit_log)
-        self.session.commit()
-        self.session.refresh(audit_log)
+        await self.session.commit()
+        await self.session.refresh(audit_log)
         return audit_log
 
     # ----------------- Read ----------------- #
 
-    def get_log(self, log_id: UUID) -> AuditLog:
+    async def get_log(self, log_id: UUID) -> AuditLog:
         """Retrieve audit log by ID."""
         stmt = select(AuditLog).where(AuditLog.id == log_id)
-        log = self.session.exec(stmt).first()
+        result = await self.session.execute(stmt)
+        log = result.scalar_one_or_none()
         if not log:
             raise NotFoundError("AuditLog", str(log_id))
         return log
 
-    def get_logs_by_tenant(self, tenant_id: UUID, limit: int = 100, offset: int = 0) -> List[AuditLog]:
+    async def get_logs_by_tenant(self, tenant_id: UUID, limit: int = 100, offset: int = 0) -> List[AuditLog]:
         """Retrieve audit logs for a specific tenant."""
         stmt = (
             select(AuditLog)
             .where(AuditLog.tenant_id == tenant_id)
-            .order_by(AuditLog.performed_at.desc())  # type: ignore
+            .order_by(desc(AuditLog.performed_at))
             .offset(offset)
             .limit(limit)
         )
-        return list(self.session.exec(stmt).all())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
-    def filter_logs(self, filter_params: AuditLogFilter) -> List[AuditLog]:
+    async def filter_logs(self, filter_params: AuditLogFilter) -> List[AuditLog]:
         """Filter audit logs by multiple criteria."""
         conditions = [AuditLog.tenant_id == filter_params.tenant_id]
         
@@ -74,13 +75,14 @@ class AuditProvider:
         stmt = (
             select(AuditLog)
             .where(and_(*conditions))
-            .order_by(AuditLog.performed_at.desc())  # type: ignore
+            .order_by(desc(AuditLog.performed_at))
             .offset(filter_params.offset)
             .limit(filter_params.limit)
         )
-        return list(self.session.exec(stmt).all())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
-    def get_entity_history(self, entity_type: str, entity_id: UUID) -> List[AuditLog]:
+    async def get_entity_history(self, entity_type: str, entity_id: UUID) -> List[AuditLog]:
         """Get complete audit history for a specific entity."""
         stmt = (
             select(AuditLog)
@@ -88,6 +90,7 @@ class AuditProvider:
                 AuditLog.entity == entity_type,
                 AuditLog.entity_id == entity_id
             )
-            .order_by(AuditLog.performed_at.desc())  # type: ignore
+            .order_by(desc(AuditLog.performed_at))
         )
-        return list(self.session.exec(stmt).all())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

@@ -3,7 +3,7 @@ from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
-from ..base import BaseModel
+from database.model.base import BaseModel
 
 if TYPE_CHECKING:
     from .payment import Payment

@@ -1,4 +1,3 @@
-# Middleware/DataProvider/JournalProvider/journalProvider.py
 """
 Journal data provider.
 
@@ -8,7 +7,8 @@ Supports deterministic creation, retrieval, and listing of journals.
 
 from typing import List, Optional
 from uuid import UUID
-from sqlmodel import select, Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from database.model.finance.journal import Journal
 from backend.core.error import NotFoundError, CalculationError
 
@@ -21,18 +21,18 @@ class JournalProvider:
     are deterministic and validated before returning results.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize the provider with a database session.
 
         Args:
-            session (Session): SQLModel session for DB operations.
+            session (AsyncSession): SQLAlchemy async session for DB operations.
         """
         self.session = session
 
     # ----------------- Journal Operations ----------------- #
 
-    def create_journal(self, journal: Journal) -> Journal:
+    async def create_journal(self, journal: Journal) -> Journal:
         """
         Persist a new journal entry in the database.
 
@@ -46,16 +46,17 @@ class JournalProvider:
             ValueError: If a journal with the same reference already exists.
         """
         stmt = select(Journal).where(Journal.reference == journal.reference)
-        existing = self.session.exec(stmt).first()
+        result = await self.session.execute(stmt)
+        existing = result.scalar_one_or_none()
         if existing:
             raise ValueError(f"Journal with reference {journal.reference} already exists.")
 
         self.session.add(journal)
-        self.session.commit()
-        self.session.refresh(journal)
+        await self.session.commit()
+        await self.session.refresh(journal)
         return journal
 
-    def get_journal(self, journal_id: UUID) -> Journal:
+    async def get_journal(self, journal_id: UUID) -> Journal:
         """
         Retrieve a journal entry by its unique ID.
 
@@ -69,12 +70,13 @@ class JournalProvider:
             NotFoundError: If no journal exists with the given ID.
         """
         stmt = select(Journal).where(Journal.id == journal_id)
-        journal = self.session.exec(stmt).first()
+        result = await self.session.execute(stmt)
+        journal = result.scalar_one_or_none()
         if not journal:
             raise NotFoundError("Journal", str(journal_id))
         return journal
 
-    def list_journals(self, source: Optional[str] = None) -> List[Journal]:
+    async def list_journals(self, source: Optional[str] = None) -> List[Journal]:
         """
         List all journal entries, optionally filtered by source.
 
@@ -87,4 +89,5 @@ class JournalProvider:
         stmt = select(Journal)
         if source:
             stmt = stmt.where(Journal.source == source)
-        return list(self.session.exec(stmt).all())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

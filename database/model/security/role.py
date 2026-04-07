@@ -1,50 +1,39 @@
-# models/security/role.py
+# database/model/security/role.py
+from sqlmodel import Field, Relationship, SQLModel
+from uuid import UUID
+from typing import Optional, List, TYPE_CHECKING
+from pydantic import field_validator
 
-"""
-Security role model.
+from database.model.base import BaseModel
 
-Defines immutable system roles used for internal authorization.
-Roles represent structural authority and are not meant to change
-frequently or dynamically at runtime.
-"""
+if TYPE_CHECKING:
+    from database.model.core.user import User  # Only import core User
 
-from typing import List
-from uuid import UUID, uuid4
 
-from sqlmodel import Field, Column, JSON
-from ..base import BaseModel
+class RolePermissionLink(SQLModel, table=True):
+    """
+    Association table between roles and permissions.
+    """
+    
+    role_id: UUID = Field(foreign_key="securityrole.id", primary_key=True)
+    permission_id: UUID = Field(foreign_key="securitypermission.id", primary_key=True)
 
 
 class SecurityRole(BaseModel, table=True):
     """
-    Immutable security role.
-
-    A role defines a stable set of permissions that can be assigned
-    to internal system users (ops, admin, auditor).
+    Role model for RBAC.
     """
-
-    id: UUID = Field(
-        default_factory=uuid4,
-        primary_key=True,
-        index=True,
-        description="Unique identifier for the role",
-    )
-
-    name: str = Field(
-        unique=True,
-        index=True,
-        nullable=False,
-        description="Unique, human-readable role name",
-    )
-
-    description: str = Field(
-        nullable=False,
-        description="Semantic description of the role's authority",
-    )
-
-    permissions: List[str] = Field(
-        sa_column_kwargs={"type_": JSON},
-        default_factory=list,
-        nullable=False,
-        description="List of permission codes granted by this role",
-    )
+    
+    name: str = Field(..., max_length=50, unique=True, index=True)
+    description: Optional[str] = Field(default=None, max_length=255)
+    is_default: bool = Field(default=False)
+    
+    # Relationships - uses core User model
+    users: List["User"] = Relationship(back_populates="role")
+    
+    @field_validator('name', mode='before')
+    @classmethod
+    def validate_name(cls, v):
+        if not v or len(v.strip()) == 0:
+            raise ValueError("Role name cannot be empty")
+        return v.strip()

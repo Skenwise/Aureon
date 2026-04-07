@@ -1,4 +1,3 @@
-# schemas/paymentSchema.py
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Literal
 from datetime import datetime, date
@@ -67,7 +66,7 @@ class PaymentRead(BaseModel):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # allows compatibility with ORM models
 
 
 # ==================== INBOUND PAYMENT SCHEMAS ====================
@@ -115,7 +114,7 @@ class InboundPaymentRead(BaseModel):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True  # allows compatibility with ORM models
 
 
 # ==================== OUTBOUND PAYMENT SCHEMAS ====================
@@ -163,7 +162,7 @@ class OutboundPaymentRead(BaseModel):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # ==================== SETTLEMENT SCHEMAS ====================
@@ -207,7 +206,7 @@ class SettlementRead(BaseModel):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # ==================== PAYMENT EXECUTION SCHEMAS ====================
@@ -231,7 +230,7 @@ class PaymentExecutionRead(BaseModel):
     updated_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # ==================== PROVIDER RESPONSE SCHEMAS ====================

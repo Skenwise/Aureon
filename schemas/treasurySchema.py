@@ -1,4 +1,3 @@
-# schemas/treasurySchema.py
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Literal
 from datetime import datetime
@@ -25,7 +24,7 @@ class CashPositionRead(BaseModel):
         return v
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class LiquidityRead(BaseModel):
@@ -47,7 +46,7 @@ class LiquidityRead(BaseModel):
         return v
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class FundingTransferCreate(BaseModel):
@@ -83,7 +82,7 @@ class FundingTransferRead(BaseModel):
     completed_at: Optional[datetime] = Field(None, description="When the transfer was completed")
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ReserveFundsCreate(BaseModel):
@@ -115,7 +114,7 @@ class ReserveFundsRead(BaseModel):
     released_at: Optional[datetime] = Field(None, description="When the reservation was released or confirmed")
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProviderBalanceRead(BaseModel):
@@ -131,4 +130,4 @@ class ProviderBalanceRead(BaseModel):
     raw_response: Optional[dict] = Field(None, description="Raw API response for debugging")
     
     class Config:
-        orm_mode = True
+        from_attributes = True

@@ -1,109 +1,186 @@
-# Middleware/DataProvider/Identityrovider/userProvider.py
-from typing import Optional
-from sqlmodel import Session, select
-from database.model.core.user import User
-from schemas.userSchema import UserCreate, UserUpdate
-from backend.core.error import NotFoundError
+# Middleware/DataProvider/IdentityProvider/userProvider.py
+"""
+User data provider.
+
+Provides database access for SecurityUser model.
+Supports deterministic retrieval, creation, update, and deletion operations.
+All methods are async for FastAPI compatibility.
+"""
+
+from typing import Optional, List
+from uuid import UUID
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
+
+from database.model.security.user import SecurityUser
+from backend.core.error import NotFoundError, ValidationError
+
 
 class UserProvider:
     """
-    Data provider for User operations.
-    Handles all direct interactions with the database for User entities.
+    Provider for user queries and operations.
 
-    This class isolates database operations, so service layers or adapters
-    do not need to know about SQLModel or DB session management.
+    Encapsulates all database logic for users. All operations
+    are deterministic and validated before returning results.
+
+    Architecture Note:
+        This provider sits between the backend adapters and the database.
+        It handles ONLY database operations — no business logic.
+        All methods are async to work with FastAPI's async endpoints.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
-        Initialize the provider with a database session.
+        Initialize the provider with an async database session.
 
         Args:
-            session (Session): SQLModel session for database operations.
+            session (AsyncSession): SQLAlchemy async session for DB operations.
         """
         self.session = session
 
-    def create_user(self, user_data: UserCreate) -> User:
+    # ----------------- Create Operations ----------------- #
+
+    async def create_user(self, user_data: dict) -> SecurityUser:
         """
-        Insert a new user into the database.
+        Persist a new user in the database.
 
         Args:
-            user_data (UserCreate): Data for the new user.
+            user_data (dict): User data containing:
+                - username (str): Unique username
+                - email (str): Unique email address
+                - hashed_password (str): Bcrypt hashed password
+                - full_name (str, optional): User's full name
+                - is_active (bool, optional): Whether user is active
 
         Returns:
-            User: The created user ORM object.
+            SecurityUser: The created user with ID and timestamps.
+
+        Raises:
+            ValidationError: If user with same username or email already exists.
         """
-        user = User(
-            username=user_data.username,
-            email=user_data.email,
-            hashed_password=user_data.password,  # hash in service layer if needed
-            full_name=user_data.full_name
-        )
+        user = SecurityUser(**user_data)
         self.session.add(user)
-        self.session.commit()
-        self.session.refresh(user)
+        
+        try:
+            await self.session.flush()
+            await self.session.refresh(user)
+            return user
+        except IntegrityError as e:
+            await self.session.rollback()
+            error_msg = str(e).lower()
+            if "username" in error_msg:
+                raise ValidationError(f"Username '{user_data.get('username')}' already exists")
+            elif "email" in error_msg:
+                raise ValidationError(f"Email '{user_data.get('email')}' already exists")
+            raise ValidationError(f"Failed to create user: {str(e)}")
+
+    # ----------------- Read Operations ----------------- #
+
+    async def get_user_by_id(self, user_id: UUID) -> Optional[SecurityUser]:
+        """Retrieve a user by their unique ID."""
+        return await self.session.get(SecurityUser, user_id)
+
+    async def get_user_by_username(self, username: str) -> Optional[SecurityUser]:
+        """Retrieve a user by their username."""
+        stmt = select(SecurityUser).where(SecurityUser.username == username)  # type: ignore
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_user_by_email(self, email: str) -> Optional[SecurityUser]:
+        """Retrieve a user by their email address."""
+        stmt = select(SecurityUser).where(SecurityUser.email == email)  # type: ignore
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_user_by_id_required(self, user_id: UUID) -> SecurityUser:
+        """
+        Retrieve a user by ID, raising error if not found.
+
+        Raises:
+            NotFoundError: If no user exists with the given ID.
+        """
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            raise NotFoundError("User", str(user_id))
         return user
 
-    def get_user_by_id(self, user_id: str) -> Optional[User]:
+    async def list_users(
+        self,
+        is_active: Optional[bool] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[SecurityUser]:
         """
-        Retrieve a user by their ID.
+        List users with optional filters.
 
         Args:
-            user_id (str): User's unique ID.
-
-        Returns:
-            Optional[User]: User if found, else None.
+            is_active (bool, optional): Filter by active status.
+            limit (int): Maximum number of records to return.
+            offset (int): Number of records to skip for pagination.
         """
-        statement = select(User).where(User.id == user_id)
-        result = self.session.exec(statement).first()
-        if not result:
-            raise NotFoundError("User", user_id)
-        return result
+        stmt = select(SecurityUser).order_by(SecurityUser.created_at.desc())  # type: ignore
+        
+        if is_active is not None:
+            stmt = stmt.where(SecurityUser.is_active == is_active)  # type: ignore
+        
+        stmt = stmt.offset(offset).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
-    def get_user_by_username(self, username: str) -> Optional[User]:
+    async def count_users(self, is_active: Optional[bool] = None) -> int:
         """
-        Retrieve a user by their username.
-
-        Args:
-            username (str): User's unique username.
-
-        Returns:
-            Optional[User]: User if found, else None.
+        Count total users with optional filters.
         """
-        statement = select(User).where(User.username == username)
-        result = self.session.exec(statement).first()
-        if not result:
-            raise NotFoundError("User", username)
-        return result
+        stmt = select(func.count()).select_from(SecurityUser)
+        
+        if is_active is not None:
+            stmt = stmt.where(SecurityUser.is_active == is_active)  # type: ignore
+        
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
 
-    def update_user(self, user: User, update_data: UserUpdate) -> User:
+    # ----------------- Update Operations ----------------- #
+
+    async def update_user(self, user_id: UUID, updated_fields: dict) -> SecurityUser:
         """
-        Update user fields in the database.
+        Update an existing user.
 
-        Args:
-            user (User): The existing user ORM object.
-            update_data (UserUpdate): Fields to update.
-
-        Returns:
-            User: Updated user ORM object.
+        Raises:
+            NotFoundError: If user does not exist.
+            ValidationError: If update would create duplicate username/email.
         """
-        update_dict = update_data.model_dump(exclude_unset=True)
-        for field, value in update_dict.items():
-            setattr(user, field, value)
-        self.session.add(user)
-        self.session.commit()
-        self.session.refresh(user)
-        return user
+        user = await self.get_user_by_id_required(user_id)
+        
+        for key, value in updated_fields.items():
+            if hasattr(user, key) and value is not None:
+                setattr(user, key, value)
+        
+        try:
+            await self.session.flush()
+            await self.session.refresh(user)
+            return user
+        except IntegrityError as e:
+            await self.session.rollback()
+            error_msg = str(e).lower()
+            if "username" in error_msg:
+                raise ValidationError(f"Username '{updated_fields.get('username')}' already taken")
+            elif "email" in error_msg:
+                raise ValidationError(f"Email '{updated_fields.get('email')}' already registered")
+            raise ValidationError(f"Failed to update user: {str(e)}")
 
-    def delete_user(self, user: User) -> None:
-        """
-        Delete a user from the database.
+    async def deactivate_user(self, user_id: UUID) -> SecurityUser:
+        """Deactivate a user (soft delete)."""
+        return await self.update_user(user_id, {"is_active": False})
 
-        Args:
-            user (User): The user ORM object to delete.
+    async def activate_user(self, user_id: UUID) -> SecurityUser:
+        """Activate a user."""
+        return await self.update_user(user_id, {"is_active": True})
 
-        Returns:
-            None
-        """
-        self.session.delete(user)
-        self.session.commit()
+    # ----------------- Delete Operations ----------------- #
+
+    async def delete_user(self, user_id: UUID) -> None:
+        """Permanently delete a user from the database."""
+        user = await self.get_user_by_id_required(user_id)
+        await self.session.delete(user)
+        await self.session.flush()

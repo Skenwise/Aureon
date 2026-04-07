@@ -1,5 +1,3 @@
-#Middleware/DataProvider/ReportingProvider/ledger_reports.py
-
 """
 Compliance Reports Provider.
 
@@ -13,7 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 import json
 
-from sqlmodel import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from Middleware.DataProvider.AuditProvider.audit_provider import AuditProvider
 from Middleware.DataProvider.AuditProvider.reconciliation_provider import ReconciliationProvider
@@ -30,12 +28,12 @@ class ComplianceReportsProvider:
     Provider for compliance-related reports.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         self.session = session
         self.audit_provider = AuditProvider(session)
         self.reconciliation_provider = ReconciliationProvider(session)
 
-    def get_audit_export(
+    async def get_audit_export(
         self,
         company_id: UUID,
         start_date: datetime,
@@ -61,13 +59,13 @@ class ComplianceReportsProvider:
             offset=0
         )
         
-        logs = self.audit_provider.filter_logs(filter_params)
+        logs = await self.audit_provider.filter_logs(filter_params)
         
         entries = []
         for log in logs:
             # Parse changes JSON if present
             changes_data = None
-            if log.changes:
+            if getattr(log, 'changes', None):
                 try:
                     changes_data = json.loads(log.changes)
                 except:
@@ -77,11 +75,11 @@ class ComplianceReportsProvider:
                 "id": str(log.id),
                 "performed_at": log.performed_at.isoformat() if log.performed_at else None,
                 "performed_by": str(log.performed_by) if log.performed_by else None,
-                "action": log.action,
-                "entity": log.entity,
-                "entity_id": str(log.entity_id) if log.entity_id else None,
+                "action": getattr(log, 'action', None),
+                "entity": getattr(log, 'entity', None),
+                "entity_id": str(log.entity_id) if getattr(log, 'entity_id', None) else None,
                 "changes": changes_data,
-                "ip_address": log.ip_address
+                "ip_address": getattr(log, 'ip_address', None)
             })
         
         return AuditExportReport(
@@ -92,7 +90,7 @@ class ComplianceReportsProvider:
             entries=entries
         )
 
-    def get_reconciliation_summary(
+    async def get_reconciliation_summary(
         self,
         company_id: UUID,
         start_date: date,
@@ -103,7 +101,7 @@ class ComplianceReportsProvider:
         
         Senior Tip: Reconciliation reports prove system accuracy to auditors.
         """
-        reconciliations = self.reconciliation_provider.list_reconciliations_by_tenant(
+        reconciliations = await self.reconciliation_provider.list_reconciliations_by_tenant(
             company_id, 
             balanced=None
         )
@@ -117,24 +115,24 @@ class ComplianceReportsProvider:
         
         for rec in reconciliations:
             # Filter by date range
-            if rec.business_date < start_date or rec.business_date > end_date:
+            if getattr(rec, 'business_date', None) and (rec.business_date < start_date or rec.business_date > end_date):
                 continue
             
-            if rec.balanced:
+            if getattr(rec, 'balanced', False):
                 total_reconciled += 1
             else:
                 total_discrepancies += 1
                 
                 # Check if resolved (using notes as indicator, or add status field)
-                if rec.notes and "resolved" in rec.notes.lower():
+                if getattr(rec, 'notes', '') and "resolved" in rec.notes.lower():
                     resolved_discrepancies += 1
                 else:
                     open_discrepancies += 1
             
             daily_summary.append({
-                "date": rec.business_date.isoformat(),
+                "date": rec.business_date.isoformat() if rec.business_date else None,
                 "balanced": rec.balanced,
-                "difference": 0.0  # Would need difference field in Reconciliation model
+                "difference": getattr(rec, 'difference', 0.0)  # Would need difference field in Reconciliation model
             })
         
         return ReconciliationReport(
@@ -148,7 +146,7 @@ class ComplianceReportsProvider:
             daily_summary=daily_summary
         )
 
-    def get_daily_activity_summary(
+    async def get_daily_activity_summary(
         self,
         business_date: date,
         company_id: UUID
@@ -174,19 +172,19 @@ class ComplianceReportsProvider:
             offset=0
         )
         
-        logs = self.audit_provider.filter_logs(filter_params)
+        logs = await self.audit_provider.filter_logs(filter_params)
         
         # Count activities by action
-        new_loans = sum(1 for log in logs if log.action == "LOAN_CREATE")
-        new_payments = sum(1 for log in logs if log.action in ["PAYMENT_CREATE", "PAYMENT_EXECUTE"])
-        journal_entries = sum(1 for log in logs if log.action == "JOURNAL_POST")
-        user_logins = sum(1 for log in logs if log.action == "LOGIN")
-        system_errors = sum(1 for log in logs if log.action == "SYSTEM_ERROR")
+        new_loans = sum(1 for log in logs if getattr(log, 'action', '') == "LOAN_CREATE")
+        new_payments = sum(1 for log in logs if getattr(log, 'action', '') in ["PAYMENT_CREATE", "PAYMENT_EXECUTE"])
+        journal_entries = sum(1 for log in logs if getattr(log, 'action', '') == "JOURNAL_POST")
+        user_logins = sum(1 for log in logs if getattr(log, 'action', '') == "LOGIN")
+        system_errors = sum(1 for log in logs if getattr(log, 'action', '') == "SYSTEM_ERROR")
         
         # Calculate payment volume from changes JSON
         payment_volume = Decimal("0")
         for log in logs:
-            if log.action == "PAYMENT_EXECUTE" and log.changes:
+            if getattr(log, 'action', '') == "PAYMENT_EXECUTE" and getattr(log, 'changes', None):
                 try:
                     changes = json.loads(log.changes)
                     payment_volume += Decimal(str(changes.get("amount", 0)))
@@ -198,7 +196,7 @@ class ComplianceReportsProvider:
             tenant_id=company_id,
             new_loans=new_loans,
             new_payments=new_payments,
-            payment_volume=payment_volume,
+            payment_volume=float(payment_volume),
             journal_entries=journal_entries,
             user_logins=user_logins,
             system_errors=system_errors

@@ -3,7 +3,7 @@ from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
 from datetime import date
 from typing import Optional
-from ..base import BaseModel
+from database.model.base import BaseModel
 
 # only import for type checking to avoid circular imports
 from typing import TYPE_CHECKING

@@ -3,8 +3,8 @@ from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
 from typing import Optional
 from datetime import datetime
-from ..base import BaseModel
-from ..core.company import Company
+from database.model.base import BaseModel
+from database.model.core.company import Company
 
 # Type checking imports
 from typing import TYPE_CHECKING

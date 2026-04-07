@@ -69,4 +69,4 @@ class ChartAccountRead(BaseModel):
 
     class Config:
         """Pydantic configuration for ORM compatibility."""
-        orm_mode = True
+        from_attributes = True  # allows compatibility with ORM models

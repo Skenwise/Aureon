@@ -1,4 +1,3 @@
-# schemas/balanceSchema.py
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from uuid import UUID
@@ -17,7 +16,7 @@ class AccountBalanceRead(BaseModel):
 
     class Config:
         """Pydantic configuration for ORM compatibility."""
-        orm_mode = True
+        from_attributes = True
 
 
 class PeriodBalanceRead(BaseModel):
@@ -36,7 +35,7 @@ class PeriodBalanceRead(BaseModel):
 
     class Config:
         """Pydantic configuration for ORM compatibility."""
-        orm_mode = True
+        from_attributes = True
 
 
 class TrialBalanceItem(BaseModel):
@@ -50,7 +49,7 @@ class TrialBalanceItem(BaseModel):
     credit: Decimal
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class TrialBalanceRead(BaseModel):
@@ -64,4 +63,4 @@ class TrialBalanceRead(BaseModel):
     generated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True

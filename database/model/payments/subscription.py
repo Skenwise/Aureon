@@ -3,8 +3,8 @@ from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
 from datetime import date
 from typing import Optional
-from ..base import BaseModel
-from ..core.company import Company
+from database.model.base import BaseModel
+from database.model.core.company import Company
 from .payment_provder import PaymentProvider
 
 class Subscription(BaseModel, table=True):

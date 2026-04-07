@@ -1,6 +1,12 @@
+# database/sessionmaker.py
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from engine import sqlite_engine, sqlite_async_engine, postgres_engine, postgres_async_engine
+from database.engine import (
+    sqlite_engine, 
+    sqlite_async_engine, 
+    postgres_engine, 
+    postgres_async_engine
+)
 from typing import AsyncGenerator
 from contextlib import contextmanager, asynccontextmanager
 
@@ -11,14 +17,14 @@ from contextlib import contextmanager, asynccontextmanager
 
 SqliteSessionLocal = sessionmaker(
     bind=sqlite_engine,
-    autoflush = False,
-    autocommit = False
+    autoflush=False,
+    autocommit=False
 )
 
 PostgresSessionLocal = sessionmaker(
-    bind = postgres_engine,
-    autoflush = False,
-    autocommit = False
+    bind=postgres_engine,
+    autoflush=False,
+    autocommit=False
 )
 
 SqliteAsyncSessionLocal = async_sessionmaker(
@@ -29,44 +35,65 @@ SqliteAsyncSessionLocal = async_sessionmaker(
 
 PostgresAsyncSessionLocal = async_sessionmaker(
     postgres_async_engine,
-    class_ = AsyncSession,
-    expire_on_commit = False
+    class_=AsyncSession,
+    expire_on_commit=False
 )
 
 
 #-----------------------------------
-# CONTEXT MANAGER
+# SYNC CONTEXT MANAGERS
 #---------------------------------
 
-
-# Sqlite synchronous session
 @contextmanager
 def get_sqlite_db_session():
     db = SqliteSessionLocal()
-
     try:
         yield db
     finally:
         db.close()
 
-# Postgres synchronous session
 @contextmanager
 def get_postgres_db_session():
     db = PostgresSessionLocal()
-
     try:
         yield db
     finally:
         db.close()
 
-# Sqlite asynchronous session
-@asynccontextmanager
-async def get_sqlite_async_db_session() -> AsyncGenerator[AsyncSession, None]:
-    async with SqliteAsyncSessionLocal() as session:
-        yield session
 
-# Postgres asynchronous session
-@asynccontextmanager
+#-----------------------------------
+# ASYNC GENERATORS (for FastAPI Depends)
+#-----------------------------------
+
+async def get_sqlite_async_db_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Async database session generator for FastAPI dependencies (SQLite).
+    """
+    async with SqliteAsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
 async def get_postgres_async_db_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Async database session generator for FastAPI dependencies (PostgreSQL).
+    """
     async with PostgresAsyncSessionLocal() as session:
-        yield session
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
+# Alias for default async session (using PostgreSQL)
+get_async_db_session = get_postgres_async_db_session

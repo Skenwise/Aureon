@@ -1,5 +1,3 @@
-#Middleware/DataProvider/treasuryProvider/FundingProvider.py
-
 """
 Funding Data Provider.
 
@@ -11,7 +9,8 @@ No external provider API logic is implemented here.
 
 from typing import List, Optional
 from datetime import datetime
-from sqlmodel import Session, select, or_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, or_
 from uuid import UUID
 
 from database.model.treasury.funding_transfer import FundingTransfer
@@ -32,12 +31,12 @@ class FundingProvider:
     - Transfer state transitions
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize provider with database session.
 
         Args:
-            session (Session): Active SQLModel session.
+            session (AsyncSession): Active SQLAlchemy async session.
         """
         self.session = session
 
@@ -45,7 +44,7 @@ class FundingProvider:
     # Create
     # ------------------------------------------------------------
 
-    def create_transfer(self, transfer_in) -> FundingTransfer:
+    async def create_transfer(self, transfer_in) -> FundingTransfer:
         """
         Create a new funding transfer record.
 
@@ -62,7 +61,7 @@ class FundingProvider:
             ValidationError: If source position does not exist or insufficient funds.
         """
 
-        source = self._get_cash_position(
+        source = await self._get_cash_position(
             transfer_in.from_provider,
             transfer_in.from_account_id
         )
@@ -87,8 +86,8 @@ class FundingProvider:
         )
 
         self.session.add(transfer)
-        self.session.commit()
-        self.session.refresh(transfer)
+        await self.session.commit()
+        await self.session.refresh(transfer)
 
         return transfer
 
@@ -96,7 +95,7 @@ class FundingProvider:
     # Read
     # ------------------------------------------------------------
 
-    def get_transfer(self, transfer_id: str) -> FundingTransfer:
+    async def get_transfer(self, transfer_id: str) -> FundingTransfer:
         """
         Retrieve transfer by ID.
         """
@@ -105,14 +104,15 @@ class FundingProvider:
             FundingTransfer.transfer_id == transfer_id
         )
 
-        transfer = self.session.exec(statement).first()
+        result = await self.session.execute(statement)
+        transfer = result.scalar_one_or_none()
 
         if not transfer:
             raise NotFoundError("FundingTransfer", f"ID: {transfer_id}")
 
         return transfer
 
-    def list_transfers(
+    async def list_transfers(
         self,
         provider: Optional[str] = None,
         status: Optional[str] = None
@@ -136,28 +136,29 @@ class FundingProvider:
                 FundingTransfer.status == status
             )
 
-        return list(self.session.exec(statement).all())
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
 
     # ------------------------------------------------------------
     # State transitions
     # ------------------------------------------------------------
 
-    def complete_transfer(self, transfer_id: str) -> FundingTransfer:
+    async def complete_transfer(self, transfer_id: str) -> FundingTransfer:
         """
         Mark transfer completed and update liquidity positions.
         """
 
-        transfer = self.get_transfer(transfer_id)
+        transfer = await self.get_transfer(transfer_id)
 
         if transfer.status != "PENDING":
             raise ValidationError("Only PENDING transfers can be completed")
 
-        source = self._get_cash_position(
+        source = await self._get_cash_position(
             transfer.from_provider,
             transfer.from_account_id
         )
 
-        destination = self._get_cash_position(
+        destination = await self._get_cash_position(
             transfer.to_provider,
             transfer.to_account_id
         )
@@ -177,34 +178,34 @@ class FundingProvider:
         self.session.add(destination)
         self.session.add(transfer)
 
-        self.session.commit()
-        self.session.refresh(transfer)
+        await self.session.commit()
+        await self.session.refresh(transfer)
 
         return transfer
 
-    def fail_transfer(self, transfer_id: str, reason: str) -> FundingTransfer:
+    async def fail_transfer(self, transfer_id: str, reason: str) -> FundingTransfer:
         """
         Mark transfer failed.
         """
 
-        transfer = self.get_transfer(transfer_id)
+        transfer = await self.get_transfer(transfer_id)
 
         transfer.status = "FAILED"
         transfer.notes = reason
         transfer.completed_at = datetime.utcnow()
 
         self.session.add(transfer)
-        self.session.commit()
-        self.session.refresh(transfer)
+        await self.session.commit()
+        await self.session.refresh(transfer)
 
         return transfer
 
-    def cancel_transfer(self, transfer_id: str) -> FundingTransfer:
+    async def cancel_transfer(self, transfer_id: str) -> FundingTransfer:
         """
         Cancel pending transfer.
         """
 
-        transfer = self.get_transfer(transfer_id)
+        transfer = await self.get_transfer(transfer_id)
 
         if transfer.status != "PENDING":
             raise ValidationError("Only PENDING transfers can be cancelled")
@@ -213,8 +214,8 @@ class FundingProvider:
         transfer.completed_at = datetime.utcnow()
 
         self.session.add(transfer)
-        self.session.commit()
-        self.session.refresh(transfer)
+        await self.session.commit()
+        await self.session.refresh(transfer)
 
         return transfer
 
@@ -222,7 +223,7 @@ class FundingProvider:
     # Internal helpers
     # ------------------------------------------------------------
 
-    def _get_cash_position(
+    async def _get_cash_position(
         self,
         provider: str,
         account_id: str
@@ -236,7 +237,8 @@ class FundingProvider:
             CashPosition.account_id == account_id
         )
 
-        position = self.session.exec(statement).first()
+        result = await self.session.execute(statement)
+        position = result.scalar_one_or_none()
 
         if not position:
             raise ValidationError(

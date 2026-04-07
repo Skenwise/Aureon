@@ -1,4 +1,3 @@
-# Middleware/DataProvider/LoanProvider/disbursementProvider.py
 """
 Disbursement Data Provider.
 
@@ -12,7 +11,8 @@ Execution coordination happens at the service/adapter layer.
 from typing import List
 from uuid import UUID
 from datetime import date
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from database.model.finance.loan_disbursement import LoanDisbursement
 from database.model.finance.loan import Loan
@@ -41,12 +41,12 @@ class DisbursementProvider:
     Orchestration happens at adapter/service layer.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize provider with database session.
 
         Args:
-            session (Session): Active SQLModel session.
+            session (AsyncSession): Active SQLAlchemy async session.
         """
         self.session = session
 
@@ -54,7 +54,7 @@ class DisbursementProvider:
     # Disbursement creation
     # ------------------------------------------------------------
 
-    def create_disbursement(self, disbursement_data: dict) -> LoanDisbursement:
+    async def create_disburse ment(self, disbursement_data: dict) -> LoanDisbursement:
         """
         Create a disbursement record for a loan.
 
@@ -76,7 +76,7 @@ class DisbursementProvider:
         disbursement_date = require(disbursement_data, "disbursement_date", cast_date)
         payment_provider = require(disbursement_data, "payment_provider", str)
         
-        loan = self.session.get(Loan, loan_id)
+        loan = await self.session.get(Loan, loan_id)
 
         if not loan:
             raise NotFoundError("Loan", str(loan_id))
@@ -98,8 +98,8 @@ class DisbursementProvider:
         )
 
         self.session.add(disbursement)
-        self.session.commit()
-        self.session.refresh(disbursement)
+        await self.session.commit()
+        await self.session.refresh(disbursement)
 
         return disbursement
 
@@ -107,7 +107,7 @@ class DisbursementProvider:
     # Disbursement retrieval
     # ------------------------------------------------------------
 
-    def get_disbursement(self, disbursement_id: UUID) -> LoanDisbursement:
+    async def get_disbursement(self, disbursement_id: UUID) -> LoanDisbursement:
         """
         Retrieve disbursement by ID.
 
@@ -120,14 +120,14 @@ class DisbursementProvider:
         Raises:
             NotFoundError: If disbursement does not exist.
         """
-        disbursement = self.session.get(LoanDisbursement, disbursement_id)
+        disbursement = await self.session.get(LoanDisbursement, disbursement_id)
 
         if not disbursement:
             raise NotFoundError("LoanDisbursement", str(disbursement_id))
 
         return disbursement
 
-    def list_disbursements(self, loan_id: UUID) -> List[LoanDisbursement]:
+    async def list_disbursements(self, loan_id: UUID) -> List[LoanDisbursement]:
         """
         List all disbursements for a specific loan.
 
@@ -141,13 +141,14 @@ class DisbursementProvider:
             LoanDisbursement.loan_id == loan_id
         )
 
-        return list(self.session.exec(statement).all())
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
 
     # ------------------------------------------------------------
     # Disbursement execution
     # ------------------------------------------------------------
 
-    def execute_disbursement(self, disbursement_id: UUID) -> LoanDisbursement:
+    async def execute_disbursement(self, disbursement_id: UUID) -> LoanDisbursement:
         """
         Execute a disbursement.
 
@@ -173,7 +174,7 @@ class DisbursementProvider:
             NotFoundError: If disbursement does not exist.
             ValidationError: If disbursement already executed.
         """
-        disbursement = self.get_disbursement(disbursement_id)
+        disbursement = await self.get_disbursement(disbursement_id)
 
         if disbursement.status != "PENDING":
             raise ValidationError(
@@ -183,12 +184,12 @@ class DisbursementProvider:
         disbursement.status = "COMPLETED"
 
         self.session.add(disbursement)
-        self.session.commit()
-        self.session.refresh(disbursement)
+        await self.session.commit()
+        await self.session.refresh(disbursement)
 
         return disbursement
 
-    def fail_disbursement(
+    async def fail_disbursement(
         self,
         disbursement_id: UUID,
         reason: str
@@ -206,13 +207,13 @@ class DisbursementProvider:
         Raises:
             NotFoundError: If disbursement does not exist.
         """
-        disbursement = self.get_disbursement(disbursement_id)
+        disbursement = await self.get_disbursement(disbursement_id)
 
         disbursement.status = "FAILED"
         disbursement.notes = f"{disbursement.notes or ''}\nFailed: {reason}"
 
         self.session.add(disbursement)
-        self.session.commit()
-        self.session.refresh(disbursement)
+        await self.session.commit()
+        await self.session.refresh(disbursement)
 
         return disbursement

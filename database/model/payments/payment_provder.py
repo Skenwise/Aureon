@@ -4,7 +4,7 @@ from uuid import UUID
 from typing import Optional
 
 from database.model.payments.payment import Payment
-from ..base import BaseModel
+from database.model.base import BaseModel
 
 class PaymentProvider(BaseModel, table=True):
     """

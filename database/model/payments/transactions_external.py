@@ -2,10 +2,13 @@
 from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
 from datetime import datetime
-from typing import Optional
-from ..base import BaseModel
+from typing import Optional, List, TYPE_CHECKING
+from database.model.base import BaseModel
 from .payment_provder import PaymentProvider
-from ..core.company import Company
+from database.model.core.company import Company
+
+if TYPE_CHECKING:
+    from .payment import Payment
 
 class ExternalTransaction(BaseModel, table=True):
     """
@@ -27,3 +30,4 @@ class ExternalTransaction(BaseModel, table=True):
     # Relationships
     company: Optional[Company] = Relationship()
     payment_provider: Optional[PaymentProvider] = Relationship()
+    payments: List["Payment"] = Relationship(back_populates="external_transaction")

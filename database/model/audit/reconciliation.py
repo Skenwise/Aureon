@@ -4,7 +4,7 @@ from uuid import UUID
 from datetime import date, datetime
 from typing import Optional
 from pydantic import field_validator
-from ..base import BaseModel
+from database.model.base import BaseModel
 
 
 class Reconciliation(BaseModel, table=True):

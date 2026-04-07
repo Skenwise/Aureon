@@ -3,9 +3,9 @@ from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
 from typing import Optional
 from datetime import datetime
-from ..base import BaseModel
-from ..core.company import Company
-from ..finance.account import Account
+from database.model.base import BaseModel
+from database.model.core.company import Company
+from database.model.finance.account import Account
 
 # Type checking imports
 from typing import TYPE_CHECKING
@@ -31,13 +31,12 @@ class CashPosition(BaseModel, table=True):
     # Sync tracking
     last_synced_at: Optional[datetime] = Field(default=None, description="Last time balance was fetched from provider")
     
-    
     # Optional link to internal ledger account
     linked_account_id: Optional[UUID] = Field(foreign_key="account.id", default=None)
     
     note: Optional[str] = Field(default=None)
     
-    # Relationships
+    # Relationships - keep only linked_account, remove duplicate 'account'
     company: "Company" = Relationship(back_populates="cash_positions")
     linked_account: Optional["Account"] = Relationship(back_populates="cash_positions")
     reservations: list["FundReservation"] = Relationship(back_populates="cash_position")

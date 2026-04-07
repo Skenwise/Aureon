@@ -1,5 +1,3 @@
-#Middleware/DataProvider/AccountProvider/accountProvider.py
-
 """
 Account data provider.
 
@@ -9,7 +7,8 @@ Supports deterministic retrieval, creation, update, and listing operations.
 
 from typing import List, Optional
 from uuid import UUID
-from sqlmodel import select, Session, col
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, col
 from database.model.finance.account import Account
 from backend.core.error import NotFoundError, CalculationError
 
@@ -22,18 +21,18 @@ class AccountProvider:
     are deterministic and validated before returning results.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize the provider with a database session.
 
         Args:
-            session (Session): SQLModel session for DB operations.
+            session (AsyncSession): SQLAlchemy async session for DB operations.
         """
         self.session = session
 
     # ----------------- Account Operations ----------------- #
 
-    def create_account(self, account: Account) -> Account:
+    async def create_account(self, account: Account) -> Account:
         """
         Persist a new ledger account in the database.
 
@@ -46,17 +45,18 @@ class AccountProvider:
         Raises:
             ValueError: If an account with the same account_number already exists.
         """
-        stmt = select(Account).where(Account.account_number == account.account_number)
-        existing = self.session.exec(stmt).first()
+        stmt = select(Account).where(Account.account_number == account.account_number)  # type: ignore
+        result = await self.session.execute(stmt)
+        existing = result.scalar_one_or_none()
         if existing:
             raise ValueError(f"Account with number {account.account_number} already exists.")
 
         self.session.add(account)
-        self.session.commit()
-        self.session.refresh(account)
+        await self.session.commit()
+        await self.session.refresh(account)
         return account
 
-    def get_account(self, account_id: UUID) -> Account:
+    async def get_account(self, account_id: UUID) -> Account:
         """
         Retrieve a ledger account by its unique ID.
 
@@ -69,13 +69,14 @@ class AccountProvider:
         Raises:
             NotFoundError: If no account exists with the given ID.
         """
-        stmt = select(Account).where(Account.id == account_id)
-        account = self.session.exec(stmt).first()
+        stmt = select(Account).where(Account.id == account_id)  # type: ignore
+        result = await self.session.execute(stmt)
+        account = result.scalar_one_or_none()
         if not account:
             raise NotFoundError("Account", str(account_id))
         return account
 
-    def update_account(self, account_id: UUID, updated_fields: dict) -> Account:
+    async def update_account(self, account_id: UUID, updated_fields: dict) -> Account:
         """
         Update an existing ledger account.
 
@@ -89,17 +90,17 @@ class AccountProvider:
         Raises:
             NotFoundError: If account does not exist.
         """
-        account = self.get_account(account_id)
+        account = await self.get_account(account_id)
         for key, value in updated_fields.items():
             if hasattr(account, key):
                 setattr(account, key, value)
         account.version += 1
         self.session.add(account)
-        self.session.commit()
-        self.session.refresh(account)
+        await self.session.commit()
+        await self.session.refresh(account)
         return account
 
-    def list_accounts(self) -> List[Account]:
+    async def list_accounts(self) -> List[Account]:
         """
         List all ledger accounts.
 
@@ -107,4 +108,5 @@ class AccountProvider:
             List[Account]: All accounts in the ledger.
         """
         stmt = select(Account)
-        return list(self.session.exec(stmt).all())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

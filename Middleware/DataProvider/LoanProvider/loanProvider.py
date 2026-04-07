@@ -1,4 +1,3 @@
-# Middleware/DataProvider/LoanProvider/loanProvider.py
 """
 Loan Data Provider.
 
@@ -12,7 +11,8 @@ It only manages the state of Loan contracts.
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timezone
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from database.model.finance.loan import Loan
 from backend.core.error import NotFoundError, ValidationError
@@ -37,12 +37,12 @@ class LoanProvider:
     - Accounting journal creation
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize provider with database session.
 
         Args:
-            session (Session): Active SQLModel session.
+            session (AsyncSession): Active SQLAlchemy async session.
         """
         self.session = session
 
@@ -50,7 +50,7 @@ class LoanProvider:
     # Loan creation
     # ------------------------------------------------------------
 
-    def create_loan(self, loan_data: dict) -> Loan:
+    async def create_loan(self, loan_data: dict) -> Loan:
         """
         Create a new loan contract.
 
@@ -92,8 +92,8 @@ class LoanProvider:
         )
 
         self.session.add(loan)
-        self.session.commit()
-        self.session.refresh(loan)
+        await self.session.commit()
+        await self.session.refresh(loan)
 
         return loan
 
@@ -101,7 +101,7 @@ class LoanProvider:
     # Loan retrieval
     # ------------------------------------------------------------
 
-    def get_loan(self, loan_id: UUID) -> Loan:
+    async def get_loan(self, loan_id: UUID) -> Loan:
         """
         Retrieve loan by ID.
 
@@ -114,14 +114,14 @@ class LoanProvider:
         Raises:
             NotFoundError: If loan does not exist.
         """
-        loan = self.session.get(Loan, loan_id)
+        loan = await self.session.get(Loan, loan_id)
 
         if not loan:
             raise NotFoundError("Loan", str(loan_id))
 
         return loan
 
-    def get_loan_by_number(self, loan_number: str) -> Loan:
+    async def get_loan_by_number(self, loan_number: str) -> Loan:
         """
         Retrieve loan by loan number.
 
@@ -134,8 +134,9 @@ class LoanProvider:
         Raises:
             NotFoundError: If loan does not exist.
         """
-        statement = select(Loan).where(Loan.loan_number == loan_number)
-        loan = self.session.exec(statement).first()
+        statement = select(Loan).where(Loan.loan_number == loan_number)  # type: ignore
+        result = await self.session.execute(statement)
+        loan = result.scalar_one_or_none()
 
         if not loan:
             raise NotFoundError("Loan", loan_number)
@@ -146,7 +147,7 @@ class LoanProvider:
     # List loans
     # ------------------------------------------------------------
 
-    def list_loans(
+    async def list_loans(
         self,
         borrower_id: Optional[UUID] = None,
         status: Optional[str] = None
@@ -164,18 +165,19 @@ class LoanProvider:
         statement = select(Loan)
 
         if borrower_id:
-            statement = statement.where(Loan.customer_id == borrower_id)
+            statement = statement.where(Loan.customer_id == borrower_id)  # type: ignore
 
         if status:
-            statement = statement.where(Loan.status == status)
+            statement = statement.where(Loan.status == status)  # type: ignore
 
-        return list(self.session.exec(statement).all())
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
 
     # ------------------------------------------------------------
     # Status update (state machine)
     # ------------------------------------------------------------
 
-    def update_loan_status(self, loan_id: UUID, status: str) -> Loan:
+    async def update_loan_status(self, loan_id: UUID, status: str) -> Loan:
         """
         Update loan status following state machine rules.
 
@@ -195,7 +197,7 @@ class LoanProvider:
             NotFoundError: If loan does not exist.
             ValidationError: If status transition is invalid.
         """
-        loan = self.get_loan(loan_id)
+        loan = await self.get_loan(loan_id)
         if loan.status is None:
             raise ValidationError("Current loan status is undefined")
 
@@ -217,8 +219,8 @@ class LoanProvider:
 
         loan.status = status
         self.session.add(loan)
-        self.session.commit()
-        self.session.refresh(loan)
+        await self.session.commit()
+        await self.session.refresh(loan)
 
         return loan
 
@@ -243,7 +245,7 @@ class LoanProvider:
 
         return f"LN-{timestamp}-{random_suffix}"
     
-    def list_loans_by_company(self, company_id: UUID) -> List[Loan]:
+    async def list_loans_by_company(self, company_id: UUID) -> List[Loan]:
         """
         List all loans for a specific company (tenant).
 
@@ -253,5 +255,6 @@ class LoanProvider:
         Returns:
             List[Loan]: All loans belonging to the company.
         """
-        statement = select(Loan).where(Loan.company_id == company_id)
-        return list(self.session.exec(statement).all())
+        statement = select(Loan).where(Loan.company_id == company_id)  # type: ignore
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())

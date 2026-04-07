@@ -1,6 +1,6 @@
 # models/misc/currency.py
 from sqlmodel import SQLModel, Field
-from ..base import BaseModel
+from database.model.base import BaseModel
 
 class Currency(BaseModel, table=True):
     """

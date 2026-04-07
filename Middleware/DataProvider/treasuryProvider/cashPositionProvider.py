@@ -1,5 +1,3 @@
-#Middleware/DataProvider/treasuryProvider/cashPositionProvider.py
-
 """
 Cash Position Data Provider.
 
@@ -12,7 +10,8 @@ It only manages the state of CashPosition.
 
 from typing import List, Optional
 from datetime import datetime
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from database.model.treasury.cash_position import CashPosition
 from schemas.treasurySchema import ReserveFundsCreate
@@ -41,12 +40,12 @@ class CashPositionProvider:
     - Liquidity aggregation
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize provider with database session.
 
         Args:
-            session (Session): Active SQLModel session.
+            session (AsyncSession): Active SQLAlchemy async session.
         """
         self.session = session
 
@@ -54,7 +53,7 @@ class CashPositionProvider:
     # External provider sync
     # ------------------------------------------------------------
 
-    def fetch_balance(self, provider: str, account_id: str) -> CashPosition:
+    async def fetch_balance(self, provider: str, account_id: str) -> CashPosition:
         """
         Fetch stored balance snapshot for provider account.
 
@@ -78,7 +77,8 @@ class CashPositionProvider:
             CashPosition.account_id == account_id
         )
 
-        position = self.session.exec(statement).first()
+        result = await self.session.execute(statement)
+        position = result.scalar_one_or_none()
 
         if not position:
             raise NotFoundError("Cash Position", f"{provider}:{account_id}")
@@ -89,7 +89,7 @@ class CashPositionProvider:
     # Single position
     # ------------------------------------------------------------
 
-    def get_cash_position(
+    async def get_cash_position(
         self,
         provider: str,
         account_id: str
@@ -108,13 +108,13 @@ class CashPositionProvider:
             NotFoundError
         """
 
-        return self.fetch_balance(provider, account_id)
+        return await self.fetch_balance(provider, account_id)
 
     # ------------------------------------------------------------
     # List positions
     # ------------------------------------------------------------
 
-    def list_cash_positions(
+    async def list_cash_positions(
         self,
         currency_code: Optional[str] = None
     ) -> List[CashPosition]:
@@ -135,13 +135,14 @@ class CashPositionProvider:
                 CashPosition.currency_code == currency_code
             )
 
-        return list(self.session.exec(statement).all())
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
 
     # ------------------------------------------------------------
     # Balance update (internal use only)
     # ------------------------------------------------------------
 
-    def update_balance(
+    async def update_balance(
         self,
         provider: str,
         account_id: str,
@@ -169,7 +170,7 @@ class CashPositionProvider:
             Updated CashPosition
         """
 
-        position = self.fetch_balance(provider, account_id)
+        position = await self.fetch_balance(provider, account_id)
 
         position.total_balance = total_balance
         position.available_balance = available_balance
@@ -177,8 +178,8 @@ class CashPositionProvider:
         position.last_synced_at = datetime.utcnow()
 
         self.session.add(position)
-        self.session.commit()
-        self.session.refresh(position)
+        await self.session.commit()
+        await self.session.refresh(position)
 
         return position
 
@@ -186,7 +187,7 @@ class CashPositionProvider:
     # Create position
     # ------------------------------------------------------------
 
-    def create_cash_position(
+    async def create_cash_position(
         self,
         provider: str,
         account_id: str,
@@ -205,12 +206,12 @@ class CashPositionProvider:
             CashPosition
         """
 
-        existing = self.session.exec(
-            select(CashPosition).where(
-                CashPosition.provider == provider,
-                CashPosition.account_id == account_id
-            )
-        ).first()
+        statement = select(CashPosition).where(
+            CashPosition.provider == provider,
+            CashPosition.account_id == account_id
+        )
+        result = await self.session.execute(statement)
+        existing = result.scalar_one_or_none()
 
         if existing:
             raise ValidationError(
@@ -229,22 +230,22 @@ class CashPositionProvider:
         )
 
         self.session.add(position)
-        self.session.commit()
-        self.session.refresh(position)
+        await self.session.commit()
+        await self.session.refresh(position)
 
         return position
     
     # ------------------------------------------------------------
     # Fund reservation operations
     # ------------------------------------------------------------
-    def reserve_funds(self, reserve_in: ReserveFundsCreate) -> FundReservation:
+    async def reserve_funds(self, reserve_in: ReserveFundsCreate) -> FundReservation:
         """
         Reserve funds for a pending transaction.
         Deducts available_balance without moving actual money.
 
         Raises ValidationError if insufficient funds.
         """
-        position = self.fetch_balance(reserve_in.provider, reserve_in.account_id)
+        position = await self.fetch_balance(reserve_in.provider, reserve_in.account_id)
 
         if position.available_balance < reserve_in.amount:
             raise ValidationError(
@@ -269,17 +270,17 @@ class CashPositionProvider:
 
         self.session.add(position)
         self.session.add(reservation)
-        self.session.commit()
-        self.session.refresh(reservation)
+        await self.session.commit()
+        await self.session.refresh(reservation)
 
         return reservation
 
-    def release_reservation(self, reservation_id: str) -> FundReservation:
+    async def release_reservation(self, reservation_id: str) -> FundReservation:
         """
         Release a previously reserved fund.
         Adds amount back to available_balance.
         """
-        reservation = self.session.get(FundReservation, reservation_id)
+        reservation = await self.session.get(FundReservation, reservation_id)
         if not reservation:
             raise NotFoundError("FundReservation", reservation_id)
 
@@ -287,7 +288,7 @@ class CashPositionProvider:
             raise ValidationError(f"Reservation {reservation_id} is not active and cannot be released")
 
         # Update cash position
-        position = self.fetch_balance(reservation.provider, reservation.account_id)
+        position = await self.fetch_balance(reservation.provider, reservation.account_id)
         position.reserved_balance -= reservation.amount
         position.available_balance += reservation.amount
 
@@ -297,17 +298,17 @@ class CashPositionProvider:
 
         self.session.add(position)
         self.session.add(reservation)
-        self.session.commit()
-        self.session.refresh(reservation)
+        await self.session.commit()
+        await self.session.refresh(reservation)
 
         return reservation
 
-    def confirm_reservation(self, reservation_id: str) -> FundReservation:
+    async def confirm_reservation(self, reservation_id: str) -> FundReservation:
         """
         Confirm a reservation after transaction execution.
         Deducts reserved balance permanently.
         """
-        reservation = self.session.get(FundReservation, reservation_id)
+        reservation = await self.session.get(FundReservation, reservation_id)
         if not reservation:
             raise NotFoundError("FundReservation", reservation_id)
 
@@ -315,7 +316,7 @@ class CashPositionProvider:
             raise ValidationError(f"Reservation {reservation_id} is not active and cannot be confirmed")
 
         # Update cash position
-        position = self.fetch_balance(reservation.provider, reservation.account_id)
+        position = await self.fetch_balance(reservation.provider, reservation.account_id)
         position.reserved_balance -= reservation.amount
         position.total_balance -= reservation.amount
 
@@ -325,8 +326,7 @@ class CashPositionProvider:
 
         self.session.add(position)
         self.session.add(reservation)
-        self.session.commit()
-        self.session.refresh(reservation)
+        await self.session.commit()
+        await self.session.refresh(reservation)
 
         return reservation
-

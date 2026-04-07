@@ -1,13 +1,20 @@
-# Next Tasks
+# Pylance SQLAlchemy Fix TODO
 
-## Higher Priority
+## Overall Task
+Add `# type: ignore` to .where() and .order_by() lines causing Pylance errors.
 
-- [ ] build the  Identity module
-- [ ] build the accounting module
-- [ ] write high quality code 
-- [ ] understand the design pattern use on those two modules
+## Steps
+- [x] 1. Create this TODO.md
+- [x] 2. Edit IdentityProvider/permissionProvider.py (fixed)
+- [ ] 3. Edit IdentityProvider/roleProvider.py (done)
+- [x] 4. Edit LoanProvider/loanProvider.py (done)
+- [x] 5. Edit AccountProvider/accountProvider.py (done)
+- [ ] 6. Edit PaymentProvider/outboundProvider.py, inboundProvider.py, settlementProvider.py (chained wheres)
+- [ ] 7. Edit TenantProvider.py, currencyProvider.py, chartOfAccountProvider.py
+- [ ] 8. Edit AuditProvider/*, treasuryProvider/*, ReportingProvider/*
+- [ ] 9. Edit remaining: journalProvider.py, reconciliation_provider.py, etc.
+- [ ] 10. Test server: curl http://localhost:8000/health
+- [ ] 11. attempt_completion
 
-## Lower Priority
+Progress: Starting with permissionProvider.py (VSCode visible)
 
-- [ ] refine architecture technical documentation 
-- [ ] start writting documentation for eahc module

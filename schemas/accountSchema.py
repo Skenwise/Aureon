@@ -75,4 +75,4 @@ class AccountRead(BaseModel):
     class Config:
         """Pydantic configuration."""
 
-        orm_mode = True
+        from_attributes = True  # allows compatibility with ORM models

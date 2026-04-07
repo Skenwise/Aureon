@@ -81,4 +81,3 @@ Frontend → App (FastAPI routes) → Backend (business logic) → Provider (dat
 - Schema layer: Dedicated `schemas/` module established with tenants schemas
 - App layer: Not yet implemented
 - Frontend layer: Not yet implemented</content>
-<parameter name="filePath">/home/skenwise/dbs/Desktop/Project/Aureon/docs/architecture.md

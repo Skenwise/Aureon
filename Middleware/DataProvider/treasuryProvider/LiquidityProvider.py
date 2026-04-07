@@ -1,5 +1,3 @@
-#Middleware/DataProvider/treasuryProvider/LiquidityProvider.py
-
 """
 Liquidity Data Provider.
 
@@ -12,8 +10,8 @@ It acts as the real-time treasury liquidity oracle.
 
 from typing import List, Dict
 from decimal import Decimal
-from sqlmodel import Session, select
-from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
 
 from database.model.treasury.cash_position import CashPosition
 
@@ -33,12 +31,12 @@ class LiquidityProvider:
     Uses CashPosition as single source of truth.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize provider with database session.
 
         Args:
-            session (Session): Active SQLModel session.
+            session (AsyncSession): Active SQLAlchemy async session.
         """
         self.session = session
 
@@ -46,7 +44,7 @@ class LiquidityProvider:
     # Liquidity snapshot
     # ------------------------------------------------------------
 
-    def get_liquidity(self, currency_code: str) -> Dict:
+    async def get_liquidity(self, currency_code: str) -> Dict:
         """
         Get aggregated liquidity for a single currency.
 
@@ -75,12 +73,13 @@ class LiquidityProvider:
             .group_by(CashPosition.currency_code)
         )
 
-        result = self.session.exec(statement).first()
+        result = await self.session.execute(statement)
+        row = result.first()
 
-        if not result:
+        if not row:
             raise NotFoundError("Liquidity", f"Currency: {currency_code}")
 
-        currency, total, available, reserved = result
+        currency, total, available, reserved = row
 
         return {
             "currency_code": currency,
@@ -93,7 +92,7 @@ class LiquidityProvider:
     # All liquidity
     # ------------------------------------------------------------
 
-    def get_total_liquidity(self) -> List[Dict]:
+    async def get_total_liquidity(self) -> List[Dict]:
         """
         Get liquidity across all currencies.
 
@@ -111,11 +110,12 @@ class LiquidityProvider:
             .group_by(CashPosition.currency_code)
         )
 
-        results = self.session.exec(statement).all()
+        result = await self.session.execute(statement)
+        rows = result.all()
 
         liquidity = []
 
-        for currency, total, available, reserved in results:
+        for currency, total, available, reserved in rows:
             liquidity.append({
                 "currency_code": currency,
                 "total_balance": total or 0,
@@ -129,7 +129,7 @@ class LiquidityProvider:
     # Sufficiency check
     # ------------------------------------------------------------
 
-    def check_sufficient_funds(
+    async def check_sufficient_funds(
         self,
         currency_code: str,
         required_amount: Decimal
@@ -151,7 +151,7 @@ class LiquidityProvider:
         if required_amount <= 0:
             raise ValidationError("Required amount must be positive")
 
-        liquidity = self.get_liquidity(currency_code)
+        liquidity = await self.get_liquidity(currency_code)
 
         available = Decimal(str(liquidity["available_balance"]))
 

@@ -1,5 +1,3 @@
-# Middleware/DataProvider/CurrencyProvider/currencyProvider.py
-
 """
 Currency data provider.
 Provides database access for Currency and ExchangeRate models.
@@ -7,8 +5,8 @@ Supports deterministic retrieval and FX revaluation operations.
 """
 
 from typing import List, Optional
-from sqlmodel import select, Session, col
-from sqlalchemy import desc
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
 from database.model.misc.currency import Currency
 from database.model.misc.exchange_rate import ExchangeRate
 from backend.core.error import NotFoundError, CalculationError
@@ -21,18 +19,18 @@ class CurrencyProvider:
     Encapsulates all database logic for currency operations and FX lookups.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """
         Initialize the provider with a database session.
 
         Args:
-            session (Session): SQLModel session for DB operations.
+            session (AsyncSession): SQLAlchemy async session for DB operations.
         """
         self.session = session
 
     # ----------------- Currency ----------------- #
 
-    def get_currency_by_code(self, code: str) -> Currency:
+    async def get_currency_by_code(self, code: str) -> Currency:
         """
         Retrieve a currency by its ISO code.
 
@@ -46,14 +44,15 @@ class CurrencyProvider:
             NotFoundError: If no currency with the given code exists.
         """
         stmt = select(Currency).where(Currency.code == code.upper())
-        currency = self.session.exec(stmt).first()
+        result = await self.session.execute(stmt)
+        currency = result.scalar_one_or_none()
 
         if not currency:
             raise NotFoundError("Currency", code)
 
         return currency
 
-    def list_currencies(self) -> List[Currency]:
+    async def list_currencies(self) -> List[Currency]:
         """
         List all available currencies.
 
@@ -61,11 +60,12 @@ class CurrencyProvider:
             List[Currency]: All currencies in the system.
         """
         stmt = select(Currency)
-        return list(self.session.exec(stmt).all())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     # ----------------- Exchange Rates ----------------- #
 
-    def get_rate(self, base_currency: str, quote_currency: str) -> float:
+    async def get_rate(self, base_currency: str, quote_currency: str) -> float:
         """
         Retrieve the latest exchange rate from base to quote currency.
 
@@ -83,16 +83,17 @@ class CurrencyProvider:
             select(ExchangeRate)
             .where(ExchangeRate.base_currency == base_currency.upper())
             .where(ExchangeRate.quote_currency == quote_currency.upper())
-            .order_by(col(ExchangeRate.valid_from).desc())
+            .order_by(desc(ExchangeRate.valid_from))
         )
-        rate_obj = self.session.exec(stmt).first()
+        result = await self.session.execute(stmt)
+        rate_obj = result.scalar_one_or_none()
 
         if not rate_obj:
             raise NotFoundError("ExchangeRate", f"{base_currency}->{quote_currency}")
 
         return rate_obj.rate
 
-    def list_exchange_rates(self) -> List[ExchangeRate]:
+    async def list_exchange_rates(self) -> List[ExchangeRate]:
         """
         List all exchange rates.
 
@@ -100,7 +101,8 @@ class CurrencyProvider:
             List[ExchangeRate]: All exchange rates in the system.
         """
         stmt = select(ExchangeRate)
-        return list(self.session.exec(stmt).all())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     # ----------------- FX Revaluation ----------------- #
 

@@ -1,9 +1,13 @@
 # models/core/customer.py
 from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
-from typing import Optional, List
-from ..base import BaseModel
+from typing import Optional, List, TYPE_CHECKING
+from database.model.base import BaseModel
 from .company import Company
+
+if TYPE_CHECKING:
+    from database.model.finance.account import Account
+    from database.model.finance.loan import Loan
 
 class Customer(BaseModel, table=True):
     """
@@ -19,3 +23,5 @@ class Customer(BaseModel, table=True):
 
     # Relationships
     company: Optional[Company] = Relationship(back_populates="customers")
+    accounts: List["Account"] = Relationship(back_populates="owner_customer")
+    loans: List["Loan"] = Relationship(back_populates="customer")

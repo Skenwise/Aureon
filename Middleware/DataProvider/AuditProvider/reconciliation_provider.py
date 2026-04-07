@@ -6,7 +6,8 @@ Provides database access for Reconciliation model.
 
 from typing import List, Optional
 from uuid import UUID
-from sqlmodel import select, Session, desc, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc, and_
 from datetime import date, datetime
 
 from database.model.audit.reconciliation import Reconciliation
@@ -21,37 +22,39 @@ class ReconciliationProvider:
     Always query by tenant_id first.
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         self.session = session
 
     # ----------------- Create ----------------- #
 
-    def create_reconciliation(self, reconciliation: Reconciliation) -> Reconciliation:
+    async def create_reconciliation(self, reconciliation: Reconciliation) -> Reconciliation:
         """Create a reconciliation record."""
         self.session.add(reconciliation)
-        self.session.commit()
-        self.session.refresh(reconciliation)
+        await self.session.commit()
+        await self.session.refresh(reconciliation)
         return reconciliation
 
     # ----------------- Read ----------------- #
 
-    def get_reconciliation(self, rec_id: UUID) -> Reconciliation:
+    async def get_reconciliation(self, rec_id: UUID) -> Reconciliation:
         """Get reconciliation by ID."""
         stmt = select(Reconciliation).where(Reconciliation.id == rec_id)
-        rec = self.session.exec(stmt).first()
+        result = await self.session.execute(stmt)
+        rec = result.scalar_one_or_none()
         if not rec:
             raise NotFoundError("Reconciliation", str(rec_id))
         return rec
 
-    def get_reconciliation_by_date(self, business_date: date, tenant_id: UUID) -> Optional[Reconciliation]:
+    async def get_reconciliation_by_date(self, business_date: date, tenant_id: UUID) -> Optional[Reconciliation]:
         """Get reconciliation for specific date and tenant."""
         stmt = select(Reconciliation).where(
             Reconciliation.business_date == business_date,
             Reconciliation.tenant_id == tenant_id
         )
-        return self.session.exec(stmt).first()
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
-    def list_reconciliations_by_tenant(
+    async def list_reconciliations_by_tenant(
         self, 
         tenant_id: UUID, 
         balanced: Optional[bool] = None,
@@ -75,19 +78,20 @@ class ReconciliationProvider:
             .offset(offset)
             .limit(limit)
         )
-        return list(self.session.exec(stmt).all())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     # ----------------- Update ----------------- #
 
-    def update_reconciliation(self, rec_id: UUID, updated_fields: dict) -> Reconciliation:
+    async def update_reconciliation(self, rec_id: UUID, updated_fields: dict) -> Reconciliation:
         """Update reconciliation record."""
-        rec = self.get_reconciliation(rec_id)
+        rec = await self.get_reconciliation(rec_id)
         
         for key, value in updated_fields.items():
             if hasattr(rec, key):
                 setattr(rec, key, value)
         
         self.session.add(rec)
-        self.session.commit()
-        self.session.refresh(rec)
+        await self.session.commit()
+        await self.session.refresh(rec)
         return rec
