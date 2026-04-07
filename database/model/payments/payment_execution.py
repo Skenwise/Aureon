@@ -1,7 +1,7 @@
 # database/model/payments/payment_execution.py
 from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
 from database.model.base import BaseModel
 
@@ -28,8 +28,8 @@ class PaymentExecution(BaseModel, table=True):
     error_code: Optional[str] = Field(default=None, max_length=50)
     error_message: Optional[str] = Field(default=None, max_length=500)
     
-    # Timestamps
-    executed_at: datetime = Field(default_factory=datetime.utcnow)
+    # Timestamps - Fixed: timezone-aware UTC
+    executed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = Field(default=None)
     
     # Relationships

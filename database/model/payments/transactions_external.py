@@ -1,7 +1,7 @@
 # models/payments/transactions_external.py
 from sqlmodel import SQLModel, Field, Relationship
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, TYPE_CHECKING
 from database.model.base import BaseModel
 from .payment_provder import PaymentProvider
@@ -24,7 +24,8 @@ class ExternalTransaction(BaseModel, table=True):
     status: str = Field(default="received")  
     # received, confirmed, failed, reversed
 
-    received_at: datetime = Field(default_factory=datetime.utcnow)
+    # Timestamp - Fixed: timezone-aware UTC
+    received_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     raw_payload: Optional[str] = Field(default=None)  # full JSON from provider
 
     # Relationships
